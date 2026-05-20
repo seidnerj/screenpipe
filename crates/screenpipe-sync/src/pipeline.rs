@@ -26,7 +26,8 @@ use std::time::Duration;
 
 use reqwest::header::HeaderMap;
 use reqwest::StatusCode;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
+use tokio::sync::watch;
 
 use crate::destination::{BlobDestination, HttpPutDirect, PutOutcome, PutRequest};
 use crate::error::SyncError;
@@ -48,6 +49,14 @@ pub struct TicketedConfig {
     /// [`HttpPutDirect`] when the caller uses [`TicketedPipeline::upload`].
     pub put_max_retries: u32,
     pub put_initial_backoff: Duration,
+    /// Optional shutdown signal forwarded into the storage-PUT retry
+    /// loop. When the channel transitions to `true`, in-flight retry
+    /// sleeps abort and the call returns a transient error so the
+    /// caller's sync loop can quit gracefully. The control-plane HTTP
+    /// calls (ticket + complete) currently rely on `reqwest`'s 30s
+    /// timeout for liveness — they don't wait on `Duration::from_secs(N)`
+    /// so cancellation there is less impactful.
+    pub shutdown: Option<watch::Receiver<bool>>,
 }
 
 impl TicketedConfig {
@@ -62,6 +71,7 @@ impl TicketedConfig {
                 .expect("default reqwest client builds"),
             put_max_retries: 3,
             put_initial_backoff: Duration::from_secs(2),
+            shutdown: None,
         }
     }
 
@@ -72,6 +82,17 @@ impl TicketedConfig {
 
     pub fn with_http(mut self, http: reqwest::Client) -> Self {
         self.http = http;
+        self
+    }
+
+    pub fn with_put_retries(mut self, max: u32, initial_backoff: Duration) -> Self {
+        self.put_max_retries = max;
+        self.put_initial_backoff = initial_backoff;
+        self
+    }
+
+    pub fn with_shutdown(mut self, rx: watch::Receiver<bool>) -> Self {
+        self.shutdown = Some(rx);
         self
     }
 }
@@ -114,9 +135,15 @@ impl TicketedPipeline {
         let ticket = self.request_ticket(ticket_body).await?;
         self.assert_put_ticket(&ticket)?;
 
-        let dest = HttpPutDirect::new(ticket.upload_url.clone())
-            .max_retries(self.config.put_max_retries)
-            .initial_backoff(self.config.put_initial_backoff);
+        // Reuse the caller-supplied reqwest client for the storage PUT
+        // so its connection pool isn't reset per batch.
+        let mut dest =
+            HttpPutDirect::with_client(ticket.upload_url.clone(), self.config.http.clone())
+                .max_retries(self.config.put_max_retries)
+                .initial_backoff(self.config.put_initial_backoff);
+        if let Some(rx) = self.config.shutdown.clone() {
+            dest = dest.with_shutdown(rx);
+        }
 
         self.upload_with_destination(&dest, body, content_type, &ticket.headers, complete_body)
             .await
@@ -179,11 +206,16 @@ impl TicketedPipeline {
     }
 
     fn assert_put_ticket(&self, ticket: &UploadTicketResponse) -> Result<(), SyncError> {
-        // `ok` is optional for forward-compat with backends that don't
-        // emit it; the binding contract is that `method` is "PUT" and
-        // `upload_url` is non-empty.
+        // `ok` is optional in the wire shape (forward-compat with backends
+        // that don't emit it — absence is treated as success). But an
+        // explicit `false` is a hard reject: the server is telling us
+        // *not* to upload. Surface the same human-readable message the
+        // pre-refactor code used so log-grepping by operators keeps
+        // working.
         if matches!(ticket.ok, Some(false)) {
-            return Err(SyncError::ControlPlaneServerError(0));
+            return Err(SyncError::InvalidArgument(
+                "upload ticket did not return a PUT target (ok=false)".to_string(),
+            ));
         }
         if !ticket.method.eq_ignore_ascii_case("PUT") {
             return Err(SyncError::InvalidArgument(format!(
@@ -241,18 +273,6 @@ async fn classify_non_success<T>(
         status,
         body.chars().take(200).collect::<String>()
     )))
-}
-
-/// Re-export for callers that want to construct an [`UploadTicketResponse`]
-/// shaped helper without depending on the private internals (used by
-/// tests; kept public so external crates can serialize a matching shape).
-#[derive(Debug, Clone, Serialize)]
-pub struct UploadTicket {
-    pub ok: bool,
-    pub method: String,
-    pub upload_url: String,
-    #[serde(default)]
-    pub headers: BTreeMap<String, String>,
 }
 
 #[cfg(test)]
@@ -362,5 +382,144 @@ mod tests {
             .await
             .unwrap_err();
         assert!(matches!(err, SyncError::InvalidArgument(_)));
+    }
+
+    #[tokio::test]
+    async fn ticket_ok_false_is_invalid_argument_with_message() {
+        // Explicit ok=false from the control plane means "do not upload".
+        // Old code surfaced this as `Ingest("upload ticket did not return
+        // a PUT target")`; the refactored path must keep that message
+        // (operators grep for it).
+        let control = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/ticket"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "ok": false,
+                "method": "PUT",
+                "upload_url": "https://example.invalid/x"
+            })))
+            .mount(&control)
+            .await;
+
+        let cfg = TicketedConfig::new(
+            format!("{}/ticket", control.uri()),
+            format!("{}/complete", control.uri()),
+        );
+        let pipeline = TicketedPipeline::new(cfg);
+        let err = pipeline
+            .upload(b"x", "application/octet-stream", &json!({}), &json!({}))
+            .await
+            .unwrap_err();
+        match err {
+            SyncError::InvalidArgument(msg) => {
+                assert!(msg.contains("ok=false"), "got: {msg}");
+                assert!(msg.contains("PUT target"), "got: {msg}");
+            }
+            other => panic!("expected InvalidArgument, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn put_succeeds_but_complete_fails_returns_error() {
+        // PUT to storage is idempotent — failing complete just means the
+        // server doesn't know about the batch. The caller should NOT
+        // advance any cursor. This test asserts the pipeline reports the
+        // failure so the caller can keep its cursor pinned.
+        let storage = MockServer::start().await;
+        Mock::given(method("PUT"))
+            .and(path("/blob"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(1)
+            .mount(&storage)
+            .await;
+
+        let control = MockServer::start().await;
+        let upload_url = format!("{}/blob", storage.uri());
+        Mock::given(method("POST"))
+            .and(path("/ticket"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "ok": true,
+                "method": "PUT",
+                "upload_url": upload_url,
+            })))
+            .mount(&control)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/complete"))
+            .respond_with(ResponseTemplate::new(409).set_body_string("conflict"))
+            .expect(1)
+            .mount(&control)
+            .await;
+
+        let cfg = TicketedConfig::new(
+            format!("{}/ticket", control.uri()),
+            format!("{}/complete", control.uri()),
+        );
+        let pipeline = TicketedPipeline::new(cfg);
+        let err = pipeline
+            .upload(b"x", "application/octet-stream", &json!({}), &json!({}))
+            .await
+            .unwrap_err();
+        // 409 is not 5xx and not auth — falls into the generic Network
+        // bucket. The caller (e.g. ee/) maps that to a recoverable error
+        // class without advancing its cursor.
+        assert!(matches!(err, SyncError::Network(_)));
+    }
+
+    #[tokio::test]
+    async fn complete_empty_body_succeeds() {
+        // Real ingest endpoints often return 204/200 with no body on
+        // complete. Make sure we don't accidentally try to JSON-decode it.
+        let storage = MockServer::start().await;
+        Mock::given(method("PUT"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&storage)
+            .await;
+        let control = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/ticket"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "ok": true,
+                "method": "PUT",
+                "upload_url": format!("{}/blob", storage.uri()),
+            })))
+            .mount(&control)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/complete"))
+            // No body, just status.
+            .respond_with(ResponseTemplate::new(204))
+            .mount(&control)
+            .await;
+
+        let cfg = TicketedConfig::new(
+            format!("{}/ticket", control.uri()),
+            format!("{}/complete", control.uri()),
+        );
+        let pipeline = TicketedPipeline::new(cfg);
+        let outcome = pipeline
+            .upload(b"x", "application/octet-stream", &json!({}), &json!({}))
+            .await
+            .unwrap();
+        assert_eq!(outcome.put.bytes_uploaded, 1);
+    }
+
+    #[tokio::test]
+    async fn pipeline_is_send_sync_via_arc() {
+        // The pipeline holds an `Arc<reqwest::Client>` internally and the
+        // BlobDestination trait is `Send + Sync`. Hand the pipeline to a
+        // spawned task to compile-check that contract — also a smoke test
+        // for concurrent use from worker pools.
+        let cfg = TicketedConfig::new("http://example.invalid/a", "http://example.invalid/b");
+        let pipeline = std::sync::Arc::new(TicketedPipeline::new(cfg));
+        let p2 = pipeline.clone();
+        let handle = tokio::spawn(async move {
+            // Call resolves to an error (invalid host), but the type-check
+            // is the point.
+            let _ = p2
+                .upload(b"x", "application/octet-stream", &json!({}), &json!({}))
+                .await;
+        });
+        handle.await.unwrap();
     }
 }

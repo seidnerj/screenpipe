@@ -426,11 +426,13 @@ pub fn encrypt_direct_upload_batch(
     let recipients: Vec<SyncKeyRecipientConfig> = direct
         .recipients
         .iter()
-        .map(|r| SyncKeyRecipientConfig {
-            purpose: r.purpose.clone(),
-            key_provider: r.key_provider.clone(),
-            key_id: r.key_id.clone(),
-            root_key: r.root_key,
+        .map(|r| {
+            SyncKeyRecipientConfig::new(
+                r.purpose.clone(),
+                r.key_provider.clone(),
+                r.key_id.clone(),
+                r.root_key,
+            )
         })
         .collect();
     let encryptor = ChaCha20Poly1305Encryptor::new(recipients)?;
@@ -569,12 +571,8 @@ async fn run_ticketed_upload(
 
     let pipeline_cfg = TicketedConfig::new(direct.ticket_url.clone(), direct.complete_url.clone())
         .with_control_headers(control_headers)
-        .with_http(http.clone());
-    let pipeline_cfg = TicketedConfig {
-        put_max_retries: DIRECT_UPLOAD_MAX_RETRIES,
-        put_initial_backoff: DIRECT_UPLOAD_INITIAL_BACKOFF,
-        ..pipeline_cfg
-    };
+        .with_http(http.clone())
+        .with_put_retries(DIRECT_UPLOAD_MAX_RETRIES, DIRECT_UPLOAD_INITIAL_BACKOFF);
 
     let complete_req = DirectUploadCompleteRequest {
         mode: manifest.mode.clone(),

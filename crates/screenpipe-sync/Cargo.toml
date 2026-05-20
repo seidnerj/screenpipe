@@ -21,6 +21,9 @@ hex = "0.4"
 
 # Feature-gated: HTTP transport. Required for `HttpPutDirect` + `TicketedPipeline`.
 reqwest = { workspace = true, optional = true }
+# Used by `HttpPutDirect` to hold the upload body once and clone refcount-
+# only across retries (a 50MB batch retried 3× should not allocate 150MB).
+bytes = { version = "1", optional = true }
 
 # Feature-gated: body encryption (ChaCha20-Poly1305 + per-recipient key wrap).
 chacha20poly1305 = { version = "0.10", optional = true }
@@ -35,5 +38,5 @@ tempfile = "3"
 
 [features]
 default = ["http", "encrypt"]
-http = ["dep:reqwest"]
+http = ["dep:reqwest", "dep:bytes"]
 encrypt = ["dep:chacha20poly1305", "dep:base64", "dep:rand", "dep:zeroize"]

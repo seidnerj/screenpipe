@@ -44,12 +44,67 @@ const ALGORITHM: &str = "chacha20poly1305";
 
 /// What the caller hands the encryptor: a static set of recipients (key
 /// id + raw root key bytes). Root keys never leave the process.
-#[derive(Debug, Clone)]
+///
+/// Constructed via [`KeyRecipientConfig::new`] so the raw `[u8; KEY_SIZE]`
+/// the caller passes is immediately moved into a [`Zeroizing`] wrapper —
+/// the stored copy wipes on drop. The fields are NOT `pub` for the same
+/// reason: handing out `&[u8]` references to the root key would let
+/// callers leak it via `println!("{:?}", &cfg.root_key())`. Use the
+/// accessors when actual access is needed.
+///
+/// `Debug` is manual on purpose — derived `Debug` over `[u8; 32]` would
+/// dump the customer's MDM root key into any log line that formats the
+/// config. The manual impl prints `<redacted; 32 bytes>` instead. Same
+/// reasoning applies to `Display` (not implemented).
+#[derive(Clone)]
 pub struct KeyRecipientConfig {
-    pub purpose: String,
-    pub key_provider: String,
-    pub key_id: String,
-    pub root_key: [u8; KEY_SIZE],
+    purpose: String,
+    key_provider: String,
+    key_id: String,
+    root_key: Zeroizing<[u8; KEY_SIZE]>,
+}
+
+impl KeyRecipientConfig {
+    /// Build a recipient. `root_key` is moved into a `Zeroizing` wrapper
+    /// inside the struct; the caller's local copy is NOT zeroized — that
+    /// is the caller's responsibility (e.g. wipe MDM provisioning bytes
+    /// after handing them in).
+    pub fn new(
+        purpose: impl Into<String>,
+        key_provider: impl Into<String>,
+        key_id: impl Into<String>,
+        root_key: [u8; KEY_SIZE],
+    ) -> Self {
+        Self {
+            purpose: purpose.into(),
+            key_provider: key_provider.into(),
+            key_id: key_id.into(),
+            root_key: Zeroizing::new(root_key),
+        }
+    }
+
+    pub fn purpose(&self) -> &str {
+        &self.purpose
+    }
+
+    pub fn key_provider(&self) -> &str {
+        &self.key_provider
+    }
+
+    pub fn key_id(&self) -> &str {
+        &self.key_id
+    }
+}
+
+impl std::fmt::Debug for KeyRecipientConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("KeyRecipientConfig")
+            .field("purpose", &self.purpose)
+            .field("key_provider", &self.key_provider)
+            .field("key_id", &self.key_id)
+            .field("root_key", &format_args!("<redacted; {} bytes>", KEY_SIZE))
+            .finish()
+    }
 }
 
 /// What lands in the manifest. The wrapped data key is base64'd so the
@@ -80,14 +135,6 @@ pub struct EncryptedBody {
     pub descriptor: EncryptionDescriptor,
 }
 
-/// Free function exposed so callers (and tests) can size-estimate
-/// manifest output without instantiating an encryptor. Useful for
-/// streaming uploads that want to set Content-Length up front.
-pub fn encryption_descriptor_size(num_recipients: usize) -> usize {
-    // Rough upper bound — ~200 bytes per recipient + 200 of fixed fields.
-    200 + 200 * num_recipients
-}
-
 pub trait BodyEncryptor: Send + Sync {
     fn encrypt(&self, plaintext: &[u8]) -> Result<EncryptedBody, SyncError>;
 }
@@ -103,27 +150,29 @@ impl ChaCha20Poly1305Encryptor {
                 "encryption requires at least primary + recovery recipients".to_string(),
             ));
         }
-        if !recipients.iter().any(|r| r.purpose == "primary") {
+        if !recipients.iter().any(|r| r.purpose() == "primary") {
             return Err(SyncError::InvalidArgument(
                 "encryption requires a recipient with purpose=primary".to_string(),
             ));
         }
-        if !recipients.iter().any(|r| r.purpose == "recovery") {
+        if !recipients.iter().any(|r| r.purpose() == "recovery") {
             return Err(SyncError::InvalidArgument(
                 "encryption requires a recipient with purpose=recovery".to_string(),
             ));
         }
         // Catch the silent-misconfiguration footgun: two recipients sharing
         // a key id or raw bytes means recovery isn't actually independent.
+        // `Zeroizing<[u8; 32]>` derefs to `[u8; 32]` for equality so the
+        // comparison still works on the bytes, not the wrapper identity.
         for (i, a) in recipients.iter().enumerate() {
             for b in &recipients[i + 1..] {
-                if a.key_id == b.key_id {
+                if a.key_id() == b.key_id() {
                     return Err(SyncError::InvalidArgument(format!(
                         "recipient key_id collision: {}",
-                        a.key_id
+                        a.key_id()
                     )));
                 }
-                if a.root_key == b.root_key {
+                if *a.root_key == *b.root_key {
                     return Err(SyncError::InvalidArgument(
                         "two recipients share the same root key".to_string(),
                     ));
@@ -144,16 +193,25 @@ impl BodyEncryptor for ChaCha20Poly1305Encryptor {
 
         let data_key = generate_key();
         let nonce = generate_nonce();
+        // `chacha_encrypt` wants `&[u8; KEY_SIZE]`; rustc deref-coerces
+        // `&Zeroizing<[u8; 32]>` for us, so no manual `&*` needed (and
+        // clippy::explicit_auto_deref would flag it).
         let ciphertext = chacha_encrypt(plaintext, &data_key, &nonce)?;
 
         let mut recipients = Vec::with_capacity(self.recipients.len());
         for r in &self.recipients {
             let wrap_nonce = generate_nonce();
+            // `data_key` is the *plaintext* here (we wrap-encrypt it
+            // under the recipient's root key), so the first arg needs to
+            // be `&[u8]`. Rust won't chain Deref<Target=[u8;32]> with the
+            // [u8;N]→[u8] unsize coercion automatically, so we deref the
+            // Zeroizing wrapper explicitly. `&r.root_key` for the key
+            // arg only needs a single Deref step, which rustc does for us.
             let wrapped = chacha_encrypt(&*data_key, &r.root_key, &wrap_nonce)?;
             recipients.push(KeyRecipient {
-                purpose: r.purpose.clone(),
-                key_provider: r.key_provider.clone(),
-                key_id: r.key_id.clone(),
+                purpose: r.purpose().to_string(),
+                key_provider: r.key_provider().to_string(),
+                key_id: r.key_id().to_string(),
                 key_wrap_algorithm: ALGORITHM.to_string(),
                 wrapped_data_key_b64: BASE64.encode(wrapped),
                 wrap_nonce_b64: Some(BASE64.encode(wrap_nonce)),
@@ -163,8 +221,8 @@ impl BodyEncryptor for ChaCha20Poly1305Encryptor {
         let primary_key_id = self
             .recipients
             .iter()
-            .find(|r| r.purpose == "primary")
-            .map(|r| r.key_id.clone())
+            .find(|r| r.purpose() == "primary")
+            .map(|r| r.key_id().to_string())
             .expect("primary recipient validated in constructor");
 
         Ok(EncryptedBody {
@@ -275,18 +333,13 @@ mod tests {
 
     fn cfg() -> Vec<KeyRecipientConfig> {
         vec![
-            KeyRecipientConfig {
-                purpose: "primary".into(),
-                key_provider: "mdm_symmetric_v1".into(),
-                key_id: "primary-v1".into(),
-                root_key: [7u8; KEY_SIZE],
-            },
-            KeyRecipientConfig {
-                purpose: "recovery".into(),
-                key_provider: "mdm_symmetric_v1".into(),
-                key_id: "recovery-v1".into(),
-                root_key: [8u8; KEY_SIZE],
-            },
+            KeyRecipientConfig::new("primary", "mdm_symmetric_v1", "primary-v1", [7u8; KEY_SIZE]),
+            KeyRecipientConfig::new(
+                "recovery",
+                "mdm_symmetric_v1",
+                "recovery-v1",
+                [8u8; KEY_SIZE],
+            ),
         ]
     }
 
@@ -326,30 +379,20 @@ mod tests {
 
     #[test]
     fn missing_recovery_recipient_rejected() {
-        let only_primary = vec![KeyRecipientConfig {
-            purpose: "primary".into(),
-            key_provider: "x".into(),
-            key_id: "p".into(),
-            root_key: [1u8; KEY_SIZE],
-        }];
+        let only_primary = vec![KeyRecipientConfig::new(
+            "primary",
+            "x",
+            "p",
+            [1u8; KEY_SIZE],
+        )];
         assert!(ChaCha20Poly1305Encryptor::new(only_primary).is_err());
     }
 
     #[test]
     fn duplicate_key_id_rejected() {
         let dup = vec![
-            KeyRecipientConfig {
-                purpose: "primary".into(),
-                key_provider: "x".into(),
-                key_id: "same".into(),
-                root_key: [1u8; KEY_SIZE],
-            },
-            KeyRecipientConfig {
-                purpose: "recovery".into(),
-                key_provider: "x".into(),
-                key_id: "same".into(),
-                root_key: [2u8; KEY_SIZE],
-            },
+            KeyRecipientConfig::new("primary", "x", "same", [1u8; KEY_SIZE]),
+            KeyRecipientConfig::new("recovery", "x", "same", [2u8; KEY_SIZE]),
         ];
         // We can't `.unwrap_err()` here — Encryptor deliberately doesn't
         // derive Debug to keep root keys out of any accidental log line.
@@ -362,18 +405,8 @@ mod tests {
     #[test]
     fn duplicate_root_key_rejected() {
         let dup = vec![
-            KeyRecipientConfig {
-                purpose: "primary".into(),
-                key_provider: "x".into(),
-                key_id: "a".into(),
-                root_key: [1u8; KEY_SIZE],
-            },
-            KeyRecipientConfig {
-                purpose: "recovery".into(),
-                key_provider: "x".into(),
-                key_id: "b".into(),
-                root_key: [1u8; KEY_SIZE],
-            },
+            KeyRecipientConfig::new("primary", "x", "a", [1u8; KEY_SIZE]),
+            KeyRecipientConfig::new("recovery", "x", "b", [1u8; KEY_SIZE]),
         ];
         match ChaCha20Poly1305Encryptor::new(dup) {
             Err(SyncError::InvalidArgument(_)) => {}
@@ -389,5 +422,19 @@ mod tests {
         assert_ne!(a.descriptor.nonce_b64, b.descriptor.nonce_b64);
         // Ciphertext also differs even for identical plaintext.
         assert_ne!(a.ciphertext, b.ciphertext);
+    }
+
+    #[test]
+    fn debug_impl_redacts_root_key_bytes() {
+        // Regression guard: derived Debug over [u8; 32] would dump the
+        // customer's MDM root key into any log line. The manual impl must
+        // never include the raw bytes.
+        let cfg = KeyRecipientConfig::new("primary", "mdm_v1", "k-1", [42u8; KEY_SIZE]);
+        let rendered = format!("{cfg:?}");
+        assert!(rendered.contains("redacted"), "got: {rendered}");
+        assert!(
+            !rendered.contains("42"),
+            "raw bytes leaked into Debug output: {rendered}"
+        );
     }
 }

@@ -54,8 +54,8 @@ pub use error::SyncError;
 
 #[cfg(feature = "encrypt")]
 pub use encrypt::{
-    encryption_descriptor_size, BodyEncryptor, ChaCha20Poly1305Encryptor, EncryptedBody,
-    EncryptionDescriptor, KeyRecipient, KeyRecipientConfig, KEY_SIZE, NONCE_SIZE,
+    BodyEncryptor, ChaCha20Poly1305Encryptor, EncryptedBody, EncryptionDescriptor, KeyRecipient,
+    KeyRecipientConfig, KEY_SIZE, NONCE_SIZE,
 };
 
 #[cfg(feature = "http")]

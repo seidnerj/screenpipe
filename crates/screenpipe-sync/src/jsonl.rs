@@ -94,4 +94,51 @@ mod tests {
         assert!(out.body.is_empty());
         assert_eq!(out.written, 0);
     }
+
+    #[test]
+    fn unserializable_records_are_skipped_not_fatal() {
+        // One broken record in the middle of two good ones must not
+        // poison the batch. We force a Serialize failure with a custom
+        // type that returns Err for the bad row only — this exercises
+        // the per-record `serde_json::to_vec` error path realistically.
+        use serde::ser::SerializeStruct;
+
+        struct Mixed {
+            label: &'static str,
+            should_fail: bool,
+        }
+        impl serde::Serialize for Mixed {
+            fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+                if self.should_fail {
+                    return Err(serde::ser::Error::custom("intentional"));
+                }
+                let mut st = s.serialize_struct("Mixed", 1)?;
+                st.serialize_field("label", self.label)?;
+                st.end()
+            }
+        }
+        let records = vec![
+            Mixed {
+                label: "first-good",
+                should_fail: false,
+            },
+            Mixed {
+                label: "should-be-skipped",
+                should_fail: true,
+            },
+            Mixed {
+                label: "last-good",
+                should_fail: false,
+            },
+        ];
+        let out = encode(records, "mixed");
+        assert_eq!(out.written, 2, "two good records should land");
+        assert_eq!(out.skipped, 1, "one broken record should be skipped");
+        let s = std::str::from_utf8(&out.body).unwrap();
+        assert!(s.contains("first-good"));
+        assert!(s.contains("last-good"));
+        assert!(!s.contains("should-be-skipped"));
+        // Exactly two trailing newlines means exactly two lines.
+        assert_eq!(s.bytes().filter(|&b| b == b'\n').count(), 2);
+    }
 }

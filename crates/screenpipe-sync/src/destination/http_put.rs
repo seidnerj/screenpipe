@@ -13,11 +13,29 @@
 //!
 //! Retries with exponential backoff on 5xx + network errors; surfaces 4xx
 //! as [`SyncError::StorageRejected`] (permanent for this URL).
+//!
+//! ## Memory shape
+//!
+//! The request body is moved into a single [`bytes::Bytes`] at the start
+//! of [`HttpPutDirect::put`]. Each retry attempt clones this `Bytes` —
+//! which is a refcount bump, not a fresh allocation. So a 50MB body
+//! retried 3× costs 50MB total, not 150MB.
+//!
+//! ## Cancellation
+//!
+//! Long retry sleeps would normally make graceful shutdown sluggish (up
+//! to 8 seconds with the default backoff). [`HttpPutDirect::with_shutdown`]
+//! takes a [`tokio::sync::watch::Receiver<bool>`] — when it flips to
+//! `true`, an in-flight retry sleep aborts and the call returns a
+//! transient error so the caller can move on cleanly. Matches the
+//! shutdown channel shape already used in `ee/desktop-rust/enterprise_sync.rs`.
 
 use std::time::Duration;
 
 use async_trait::async_trait;
+use bytes::Bytes;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE};
+use tokio::sync::watch;
 use tracing::warn;
 
 use super::{BlobDestination, PutOutcome, PutRequest};
@@ -25,20 +43,24 @@ use crate::error::SyncError;
 
 /// PUT a body to a single target URL with retries.
 ///
-/// Construct with `HttpPutDirect::new(url)`, then call via the
-/// [`BlobDestination`] trait. The URL is per-instance because real callers
-/// usually obtain a fresh signed URL per batch from a control plane —
-/// they wrap construction in their own loop.
+/// Construct with [`HttpPutDirect::new`], optionally configure via the
+/// builder methods, then invoke via the [`BlobDestination`] trait. The
+/// URL is per-instance because real callers usually obtain a fresh
+/// signed URL per batch from a control plane — they wrap construction in
+/// their own loop.
 pub struct HttpPutDirect {
     http: reqwest::Client,
     url: String,
     max_retries: u32,
     initial_backoff: Duration,
+    shutdown: Option<watch::Receiver<bool>>,
 }
 
 impl HttpPutDirect {
     /// Use a sensible default client (60s timeout). For custom TLS roots,
-    /// timeouts, or proxies, see [`Self::with_client`].
+    /// timeouts, or proxies, see [`Self::with_client`]. Most production
+    /// callers reuse one `reqwest::Client` across the process — pass it
+    /// in via `with_client` so the connection pool isn't reset per batch.
     pub fn new(url: impl Into<String>) -> Self {
         Self::with_client(
             url,
@@ -55,6 +77,7 @@ impl HttpPutDirect {
             http,
             max_retries: 3,
             initial_backoff: Duration::from_secs(2),
+            shutdown: None,
         }
     }
 
@@ -67,6 +90,46 @@ impl HttpPutDirect {
         self.initial_backoff = d;
         self
     }
+
+    /// Attach a shutdown watch. When the channel transitions to `true`
+    /// (or the sender is dropped, which the consumer's protocol treats as
+    /// "host is exiting"), an in-flight retry sleep aborts and the call
+    /// resolves as a transient error instead of blocking the runtime.
+    pub fn with_shutdown(mut self, rx: watch::Receiver<bool>) -> Self {
+        self.shutdown = Some(rx);
+        self
+    }
+
+    /// Returns true if the shutdown channel has been signalled.
+    fn shutdown_requested(&self) -> bool {
+        match &self.shutdown {
+            Some(rx) => *rx.borrow(),
+            None => false,
+        }
+    }
+
+    /// Sleep for `dur` OR until the shutdown channel fires. Returns true
+    /// if shutdown won (caller should abort). Distinct from the upstream
+    /// `tokio::time::sleep` so the function never holds the runtime past
+    /// a graceful-quit signal.
+    async fn sleep_or_shutdown(&self, dur: Duration) -> bool {
+        let mut shutdown = match self.shutdown.clone() {
+            Some(rx) => rx,
+            None => {
+                tokio::time::sleep(dur).await;
+                return false;
+            }
+        };
+        if *shutdown.borrow() {
+            return true;
+        }
+        tokio::select! {
+            _ = tokio::time::sleep(dur) => false,
+            // `changed()` resolves on any change OR when the Sender is
+            // dropped. In both cases we treat it as "stop sleeping".
+            _ = shutdown.changed() => true,
+        }
+    }
 }
 
 #[async_trait]
@@ -75,6 +138,11 @@ impl BlobDestination for HttpPutDirect {
         if req.body.is_empty() {
             return Err(SyncError::InvalidArgument(
                 "refusing to PUT empty body".to_string(),
+            ));
+        }
+        if self.shutdown_requested() {
+            return Err(SyncError::StorageTransient(
+                "shutdown signalled before PUT started".to_string(),
             ));
         }
 
@@ -98,6 +166,12 @@ impl BlobDestination for HttpPutDirect {
             headers.insert(name, value);
         }
 
+        // Hold the body in a single `Bytes` so each retry attempt only
+        // bumps a refcount, never reallocates. For a 50MB upload retried
+        // three times this saves ~100MB of transient heap.
+        let body = Bytes::copy_from_slice(req.body);
+        let body_len = body.len();
+
         let mut last: Option<SyncError> = None;
         for attempt in 0..self.max_retries {
             if attempt > 0 {
@@ -108,21 +182,25 @@ impl BlobDestination for HttpPutDirect {
                     self.max_retries,
                     backoff
                 );
-                tokio::time::sleep(backoff).await;
+                if self.sleep_or_shutdown(backoff).await {
+                    return Err(SyncError::StorageTransient(
+                        "shutdown signalled during retry backoff".to_string(),
+                    ));
+                }
             }
 
             let resp = self
                 .http
                 .put(&self.url)
                 .headers(headers.clone())
-                .body(req.body.to_vec())
+                .body(body.clone())
                 .send()
                 .await;
 
             match resp {
                 Ok(r) if r.status().is_success() => {
                     return Ok(PutOutcome {
-                        bytes_uploaded: req.body.len(),
+                        bytes_uploaded: body_len,
                         object_url: Some(strip_query(&self.url)),
                     });
                 }
@@ -157,12 +235,12 @@ impl BlobDestination for HttpPutDirect {
 }
 
 /// Strip `?` and everything after — keeps the storage path stable as a
-/// reference even when signature query params expire.
+/// reference even when signature query params expire. Fragment (`#…`) is
+/// stripped too because storage URLs never use it semantically and
+/// leaving it in would clutter the returned `object_url`.
 fn strip_query(url: &str) -> String {
-    match url.find('?') {
-        Some(i) => url[..i].to_string(),
-        None => url.to_string(),
-    }
+    let head = url.split('?').next().unwrap_or(url);
+    head.split('#').next().unwrap_or(head).to_string()
 }
 
 #[cfg(test)]
@@ -258,5 +336,83 @@ mod tests {
             .await
             .unwrap_err();
         assert!(matches!(err, SyncError::StorageTransient(_)));
+    }
+
+    #[tokio::test]
+    async fn shutdown_during_backoff_aborts_retries() {
+        // First attempt 503 → retry sleep starts. Flip shutdown. Should
+        // abort instead of waiting out the backoff. Without cancellation
+        // the test would hang for ~2s on the default backoff; we use
+        // 5s here and a 200ms timeout assertion to catch regressions.
+        let server = MockServer::start().await;
+        Mock::given(method("PUT"))
+            .respond_with(ResponseTemplate::new(503))
+            // Exactly one attempt expected — second one should never fire
+            // because we abort during the backoff sleep.
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let (tx, rx) = watch::channel(false);
+        let dest = HttpPutDirect::new(format!("{}/x", server.uri()))
+            .max_retries(3)
+            .initial_backoff(Duration::from_secs(5))
+            .with_shutdown(rx);
+
+        // Drive the call in the background, flip shutdown after the
+        // first attempt has had time to fail.
+        let handle = tokio::spawn(async move {
+            dest.put(&PutRequest {
+                body: b"x",
+                content_type: "application/octet-stream",
+                headers: BTreeMap::new(),
+            })
+            .await
+        });
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        tx.send(true).unwrap();
+
+        let result = tokio::time::timeout(Duration::from_secs(2), handle)
+            .await
+            .expect("should not hang past the backoff window")
+            .unwrap();
+        let err = result.unwrap_err();
+        assert!(matches!(err, SyncError::StorageTransient(_)));
+    }
+
+    #[tokio::test]
+    async fn shutdown_before_put_aborts_immediately() {
+        let (tx, rx) = watch::channel(false);
+        tx.send(true).unwrap();
+        let dest = HttpPutDirect::new("http://example.invalid/x").with_shutdown(rx);
+        let err = dest
+            .put(&PutRequest {
+                body: b"hello",
+                content_type: "application/octet-stream",
+                headers: BTreeMap::new(),
+            })
+            .await
+            .unwrap_err();
+        assert!(matches!(err, SyncError::StorageTransient(_)));
+    }
+
+    #[test]
+    fn strip_query_removes_query_and_fragment() {
+        assert_eq!(
+            strip_query("https://example.com/x?sig=abc"),
+            "https://example.com/x"
+        );
+        assert_eq!(
+            strip_query("https://example.com/x#frag"),
+            "https://example.com/x"
+        );
+        assert_eq!(
+            strip_query("https://example.com/x?sig=abc#frag"),
+            "https://example.com/x"
+        );
+        assert_eq!(
+            strip_query("https://example.com/x"),
+            "https://example.com/x"
+        );
     }
 }
