@@ -7932,6 +7932,7 @@ dependencies = [
  "reqwest 0.13.3",
  "screenpipe-events",
  "screenpipe-secrets",
+ "screenpipe-sync",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -7945,6 +7946,7 @@ dependencies = [
  "uuid",
  "which 6.0.3",
  "windows-sys 0.59.0",
+ "wiremock",
  "zeroize",
 ]
 

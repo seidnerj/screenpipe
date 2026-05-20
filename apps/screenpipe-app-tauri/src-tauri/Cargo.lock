@@ -10836,6 +10836,7 @@ dependencies = [
  "reqwest 0.13.3",
  "screenpipe-events",
  "screenpipe-secrets",
+ "screenpipe-sync",
  "serde",
  "serde_json",
  "serde_yaml",
