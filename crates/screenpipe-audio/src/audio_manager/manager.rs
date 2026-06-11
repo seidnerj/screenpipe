@@ -40,7 +40,7 @@ use crate::{
         engine::TranscriptionEngine,
         handle_new_transcript,
         stt::{process_audio_input, SAMPLE_RATE},
-        whisper::model::get_cached_whisper_model_path,
+        whisper::model::{get_cached_whisper_model_path, resolve_whisper_filename},
     },
     utils::{
         audio::resample,
@@ -1256,7 +1256,7 @@ impl AudioManager {
                     | AudioTranscriptionEngine::WhisperLargeV3TurboQuantized
                     | AudioTranscriptionEngine::WhisperLargeV3
                     | AudioTranscriptionEngine::WhisperLargeV3Quantized
-            ) && get_cached_whisper_model_path(audio_transcription_engine.as_ref()).is_some();
+            ) && resolve_whisper_filename(audio_transcription_engine.as_ref(), &languages).map(|f| get_cached_whisper_model_path(&f).is_some()).unwrap_or(false);
 
         if should_try_transcription_refresh {
             let mut engine = self.engine.write().await;

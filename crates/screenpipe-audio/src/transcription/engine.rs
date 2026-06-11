@@ -286,17 +286,17 @@ impl TranscriptionEngine {
                     "transcription engine runtime: Whisper variant={} resolved_model={} backend={:?} pin={:?}",
                     *config, resolved.model_id(), whisper_backend, pinned_language
                 );
-                let quantized_path = match get_cached_whisper_model_path(&config) {
+                let quantized_path = match get_cached_whisper_model_path(resolved.model_id()) {
                     Some(path) => path,
                     None => {
                         warn!(
                             "whisper model is not available locally yet for {:?}; audio transcription disabled until download completes",
                             config
                         );
-                        let config_for_download = config.clone();
+                        let model_filename = resolved.model_id().to_string();
                         tokio::spawn(async move {
                             match tokio::task::spawn_blocking(move || {
-                                download_whisper_model(config_for_download)
+                                download_whisper_model(&model_filename)
                             })
                             .await
                             {
