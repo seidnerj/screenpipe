@@ -218,13 +218,29 @@ pub fn resolve_model(
         };
     }
 
-    // 3. narrowest covering model wins; deterministic tie-break on model_id
-    candidates.sort_by(|a, b| {
-        a.coverage
-            .breadth()
-            .cmp(&b.coverage.breadth())
-            .then(a.model_id.cmp(b.model_id))
-    });
+    // 3. Pick the model.
+    // - With NO requested languages, use the BROADEST (most general / multilingual)
+    //   model: an unspecified language means auto-detect, not a silent forcing of
+    //   whichever specialized model (e.g. a `.en` whisper file, or Parakeet v2) happens
+    //   to vacuously "cover" the empty set.
+    // - With one or more requested languages, use the NARROWEST covering model — the
+    //   most specialized one that still covers every requested language.
+    // Deterministic tie-break on model_id in both cases.
+    if requested.is_empty() {
+        candidates.sort_by(|a, b| {
+            b.coverage
+                .breadth()
+                .cmp(&a.coverage.breadth())
+                .then(a.model_id.cmp(b.model_id))
+        });
+    } else {
+        candidates.sort_by(|a, b| {
+            a.coverage
+                .breadth()
+                .cmp(&b.coverage.breadth())
+                .then(a.model_id.cmp(b.model_id))
+        });
+    }
     let chosen = candidates[0];
 
     // 4. pin decode language only for a single requested language
@@ -308,6 +324,24 @@ mod resolve_tests {
     fn zero_languages_no_pin_multilingual() {
         let r = resolve_model(&whisper("large-v3"), ComputePref::Cpu, &[], false).unwrap();
         assert_eq!(r.model_id(), "ggml-large-v3.bin");
+        assert_eq!(r.pinned_language, None);
+    }
+
+    #[test]
+    fn zero_languages_whisper_small_picks_multilingual_not_en() {
+        // No requested language => auto-detect => the multilingual model, NOT the
+        // `.en` file that vacuously "covers" the empty set.
+        let r = resolve_model(&whisper("small"), ComputePref::Cpu, &[], false).unwrap();
+        assert_eq!(r.model_id(), "ggml-small.bin");
+        assert_eq!(r.pinned_language, None);
+    }
+
+    #[test]
+    fn zero_languages_parakeet_picks_v3_multilingual_not_v2() {
+        // No requested language => broadest Parakeet (v3 multilingual), not the
+        // English-only v2.
+        let r = resolve_model(&parakeet("0.6b"), ComputePref::Cpu, &[], true).unwrap();
+        assert_eq!(r.model_id(), "parakeet-tdt-0.6b-v3");
         assert_eq!(r.pinned_language, None);
     }
 
