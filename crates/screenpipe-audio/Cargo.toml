@@ -82,7 +82,11 @@ ort = { workspace = true, default-features = false, features = ["ndarray", "half
 ort-sys = { workspace = true }
 knf-rs = "0.3.2"
 futures = { workspace = true }
-audiopipe = { workspace = true, features = ["qwen3-asr-antirez-blas", "parakeet"], optional = true }
+# audiopipe pinned to the seidnerj fork @ f3a98df: registers the Parakeet v2
+# (English) MLX model and fixes the v2 vocab-dims crash. Kept as a per-crate git
+# dep (not the workspace audiopipe, which points at divanshu-go) until the v2
+# fix lands upstream (screenpipe/audiopipe PR #9).
+audiopipe = { git = "https://github.com/seidnerj/audiopipe.git", rev = "f3a98df3b367d6b828ed1acf481d1d5635706153", default-features = false, features = ["qwen3-asr-antirez-blas", "parakeet"], optional = true }
 mlx-rs = { workspace = true, optional = true }
 bytes = { workspace = true, features = ["serde"] }
 rand = { workspace = true }
