@@ -89,11 +89,7 @@ pub enum TranscriptionEngine {
     Parakeet {
         model: Arc<StdMutex<audiopipe::Model>>,
         vocabulary: Vec<VocabularyEntry>,
-    },
-    #[cfg(feature = "parakeet-mlx")]
-    ParakeetMlx {
-        model: Arc<StdMutex<audiopipe::Model>>,
-        vocabulary: Vec<VocabularyEntry>,
+        backend: crate::transcription::model_resolution::Backend,
     },
     Deepgram {
         config: DeepgramTranscriptionConfig,
@@ -207,7 +203,7 @@ impl TranscriptionEngine {
                 }
             }
 
-            AudioTranscriptionEngine::Parakeet | AudioTranscriptionEngine::ParakeetMlx => {
+            AudioTranscriptionEngine::Parakeet => {
                 #[cfg(any(feature = "parakeet", feature = "parakeet-mlx"))]
                 {
                     use crate::transcription::model_resolution::resolve_model;
@@ -251,6 +247,7 @@ impl TranscriptionEngine {
                             Ok(Self::Parakeet {
                                 model: Arc::new(StdMutex::new(model)),
                                 vocabulary,
+                                backend,
                             })
                         }
                         Err(e) if e.is_model_not_cached() => {
@@ -380,14 +377,14 @@ impl TranscriptionEngine {
                 vocabulary: vocabulary.clone(),
             }),
             #[cfg(feature = "parakeet")]
-            Self::Parakeet { model, vocabulary } => Ok(TranscriptionSession::Parakeet {
+            Self::Parakeet {
+                model,
+                vocabulary,
+                backend,
+            } => Ok(TranscriptionSession::Parakeet {
                 model: model.clone(),
                 vocabulary: vocabulary.clone(),
-            }),
-            #[cfg(feature = "parakeet-mlx")]
-            Self::ParakeetMlx { model, vocabulary } => Ok(TranscriptionSession::ParakeetMlx {
-                model: model.clone(),
-                vocabulary: vocabulary.clone(),
+                backend: *backend,
             }),
             Self::Deepgram {
                 config,
@@ -437,8 +434,6 @@ impl TranscriptionEngine {
             Self::Qwen3Asr { .. } => AudioTranscriptionEngine::Qwen3Asr,
             #[cfg(feature = "parakeet")]
             Self::Parakeet { .. } => AudioTranscriptionEngine::Parakeet,
-            #[cfg(feature = "parakeet-mlx")]
-            Self::ParakeetMlx { .. } => AudioTranscriptionEngine::ParakeetMlx,
             Self::Deepgram { .. } => AudioTranscriptionEngine::Deepgram,
             Self::OpenAICompatible { .. } => AudioTranscriptionEngine::OpenAICompatible,
             Self::Disabled => AudioTranscriptionEngine::Disabled,
@@ -466,11 +461,7 @@ pub enum TranscriptionSession {
     Parakeet {
         model: Arc<StdMutex<audiopipe::Model>>,
         vocabulary: Vec<VocabularyEntry>,
-    },
-    #[cfg(feature = "parakeet-mlx")]
-    ParakeetMlx {
-        model: Arc<StdMutex<audiopipe::Model>>,
-        vocabulary: Vec<VocabularyEntry>,
+        backend: crate::transcription::model_resolution::Backend,
     },
     Deepgram {
         config: DeepgramTranscriptionConfig,
@@ -616,12 +607,39 @@ impl TranscriptionSession {
             }
 
             #[cfg(feature = "parakeet")]
-            Self::Parakeet { model, .. } => {
+            #[cfg_attr(not(feature = "parakeet-mlx"), allow(unused_variables))]
+            Self::Parakeet { model, backend, .. } => {
                 let mut engine = model.lock().map_err(|e| anyhow!("stt model lock: {}", e))?;
-                // parakeet's ONNX encoder supports up to ~50s but quality is best at <=30s.
-                // benchmarked: 30s hard chunks with no overlap gives 33.9% WER vs 34.5%
-                // with 1s overlap+LCS (the dedup algorithm eats correct words).
-                // this is a safety net — the reconciler already caps batches at 45s.
+                // GPU/MLX path: Metal needs explicit cache management + panic safety
+                // (a Metal command-buffer error surfaces as a panic in the MLX completion
+                // handler; catch it instead of aborting the process).
+                #[cfg(feature = "parakeet-mlx")]
+                if *backend == crate::transcription::model_resolution::Backend::Gpu {
+                    // Clear GPU cache before transcription to reduce Metal command buffer
+                    // errors from GPU memory pressure.
+                    mlx_memory::clear_cache();
+                    let opts = audiopipe::TranscribeOptions::default();
+                    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        engine.transcribe_with_sample_rate(audio, sample_rate, opts)
+                    }))
+                    .map_err(|panic| {
+                        // Clear cache after panic to release any held GPU resources
+                        mlx_memory::clear_cache();
+                        let msg = panic
+                            .downcast_ref::<String>()
+                            .map(|s| s.as_str())
+                            .or_else(|| panic.downcast_ref::<&str>().copied())
+                            .unwrap_or("unknown panic");
+                        anyhow!("mlx transcription panic (likely Metal GPU error): {}", msg)
+                    })?
+                    .map_err(|e| anyhow!("{}", e))?;
+                    // Free cached Metal buffers after each transcription to prevent
+                    // unbounded GPU memory growth from variable-length audio tensors.
+                    mlx_memory::clear_cache();
+                    return Ok(result.text);
+                }
+                // CPU/ONNX path: parakeet's ONNX encoder supports up to ~50s but quality
+                // is best at <=30s, so chunk at 30s (safety net; reconciler caps at 45s).
                 let chunk_samples = (sample_rate as usize) * 30;
                 if audio.len() <= chunk_samples {
                     let opts = audiopipe::TranscribeOptions::default();
@@ -643,36 +661,6 @@ impl TranscriptionSession {
                     }
                     Ok(texts.join(" "))
                 }
-            }
-
-            #[cfg(feature = "parakeet-mlx")]
-            Self::ParakeetMlx { model, .. } => {
-                // GPU serialization is handled by audiopipe's Model::GPU_LOCK.
-                // The per-model mutex here just prevents concurrent Rust access
-                // to the same Model instance.
-                let mut engine = model.lock().map_err(|e| anyhow!("stt model lock: {}", e))?;
-                // Clear GPU cache before transcription to reduce Metal command buffer
-                // errors from GPU memory pressure (prevents abort in MLX completion handler)
-                mlx_memory::clear_cache();
-                let opts = audiopipe::TranscribeOptions::default();
-                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    engine.transcribe_with_sample_rate(audio, sample_rate, opts)
-                }))
-                .map_err(|panic| {
-                    // Clear cache after panic to release any held GPU resources
-                    mlx_memory::clear_cache();
-                    let msg = panic
-                        .downcast_ref::<String>()
-                        .map(|s| s.as_str())
-                        .or_else(|| panic.downcast_ref::<&str>().copied())
-                        .unwrap_or("unknown panic");
-                    anyhow!("mlx transcription panic (likely Metal GPU error): {}", msg)
-                })?
-                .map_err(|e| anyhow!("{}", e))?;
-                // Free cached Metal buffers after each transcription to prevent
-                // unbounded GPU memory growth from variable-length audio tensors
-                mlx_memory::clear_cache();
-                Ok(result.text)
             }
 
             Self::Whisper {
@@ -730,8 +718,6 @@ impl TranscriptionSession {
                     Self::Qwen3Asr { vocabulary, .. } => vocabulary,
                     #[cfg(feature = "parakeet")]
                     Self::Parakeet { vocabulary, .. } => vocabulary,
-                    #[cfg(feature = "parakeet-mlx")]
-                    Self::ParakeetMlx { vocabulary, .. } => vocabulary,
                     Self::Deepgram { vocabulary, .. } => vocabulary,
                     Self::OpenAICompatible { vocabulary, .. } => vocabulary,
                     Self::Disabled => return Ok(text),

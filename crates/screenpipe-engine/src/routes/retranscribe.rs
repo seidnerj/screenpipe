@@ -799,7 +799,7 @@ fn meeting_retranscribe_max_batch_duration_secs(engine: &AudioTranscriptionEngin
     match engine {
         AudioTranscriptionEngine::Deepgram => 5000,
         AudioTranscriptionEngine::OpenAICompatible => 3000,
-        AudioTranscriptionEngine::Parakeet | AudioTranscriptionEngine::ParakeetMlx => 30,
+        AudioTranscriptionEngine::Parakeet => 30,
         _ => 600,
     }
 }
@@ -957,10 +957,6 @@ mod tests {
     fn parakeet_uses_short_retranscribe_batches() {
         assert_eq!(
             meeting_retranscribe_max_batch_duration_secs(&AudioTranscriptionEngine::Parakeet),
-            30
-        );
-        assert_eq!(
-            meeting_retranscribe_max_batch_duration_secs(&AudioTranscriptionEngine::ParakeetMlx),
             30
         );
     }

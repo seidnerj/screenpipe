@@ -201,8 +201,6 @@ async fn main() -> anyhow::Result<()> {
             AudioTranscriptionEngine::Parakeet,
             "parakeet-tdt-0.6b-v3-int8",
         ),
-        #[cfg(feature = "parakeet-mlx")]
-        (AudioTranscriptionEngine::ParakeetMlx, "parakeet-mlx (GPU)"),
         #[cfg(feature = "qwen3-asr")]
         (AudioTranscriptionEngine::Qwen3Asr, "qwen3-asr-0.6b"),
     ];

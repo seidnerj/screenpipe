@@ -1294,9 +1294,7 @@ impl AudioManager {
         {
             let should_try_audiopipe_refresh = matches!(
                 audio_transcription_engine.as_ref(),
-                AudioTranscriptionEngine::Qwen3Asr
-                    | AudioTranscriptionEngine::Parakeet
-                    | AudioTranscriptionEngine::ParakeetMlx
+                AudioTranscriptionEngine::Qwen3Asr | AudioTranscriptionEngine::Parakeet
             );
 
             if should_try_audiopipe_refresh {
