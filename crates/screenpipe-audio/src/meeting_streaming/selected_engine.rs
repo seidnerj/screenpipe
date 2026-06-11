@@ -141,10 +141,6 @@ fn selected_engine_model(session: &TranscriptionSession) -> Option<String> {
         TranscriptionSession::Qwen3Asr { .. } => AudioTranscriptionEngine::Qwen3Asr.to_string(),
         #[cfg(feature = "parakeet")]
         TranscriptionSession::Parakeet { .. } => AudioTranscriptionEngine::Parakeet.to_string(),
-        #[cfg(feature = "parakeet-mlx")]
-        TranscriptionSession::ParakeetMlx { .. } => {
-            AudioTranscriptionEngine::ParakeetMlx.to_string()
-        }
         TranscriptionSession::Deepgram { .. } => AudioTranscriptionEngine::Deepgram.to_string(),
         TranscriptionSession::OpenAICompatible { .. } => {
             AudioTranscriptionEngine::OpenAICompatible.to_string()

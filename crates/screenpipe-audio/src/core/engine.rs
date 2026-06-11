@@ -20,7 +20,6 @@ pub enum AudioTranscriptionEngine {
     OpenAICompatible,
     Qwen3Asr,
     Parakeet,
-    ParakeetMlx,
     Disabled,
 }
 
@@ -41,7 +40,7 @@ impl std::str::FromStr for AudioTranscriptionEngine {
             "openai-compatible" => Ok(Self::OpenAICompatible),
             "qwen3-asr" => Ok(Self::Qwen3Asr),
             "parakeet" | "parakeet-tdt-0.6b-v2" => Ok(Self::Parakeet),
-            "parakeet-mlx" => Ok(Self::ParakeetMlx),
+            "parakeet-mlx" => Ok(Self::Parakeet),
             "disabled" => Ok(Self::Disabled),
             _ => Err(format!("unknown audio engine: {s}")),
         }
@@ -68,7 +67,6 @@ impl fmt::Display for AudioTranscriptionEngine {
             AudioTranscriptionEngine::OpenAICompatible => write!(f, "OpenAICompatible"),
             AudioTranscriptionEngine::Qwen3Asr => write!(f, "Qwen3Asr"),
             AudioTranscriptionEngine::Parakeet => write!(f, "Parakeet"),
-            AudioTranscriptionEngine::ParakeetMlx => write!(f, "ParakeetMlx"),
             AudioTranscriptionEngine::Disabled => write!(f, "Disabled"),
         }
     }
@@ -105,9 +103,6 @@ impl AudioTranscriptionEngine {
                 Some(sc(Family::Whisper, "large-v3-turbo", Some("q8_0")))
             }
             AudioTranscriptionEngine::Parakeet => {
-                Some(sc(Family::Parakeet, "0.6b", None))
-            }
-            AudioTranscriptionEngine::ParakeetMlx => {
                 Some(sc(Family::Parakeet, "0.6b", None))
             }
             AudioTranscriptionEngine::Deepgram
@@ -189,6 +184,15 @@ mod tests {
                 .parse::<AudioTranscriptionEngine>()
                 .unwrap(),
             AudioTranscriptionEngine::WhisperLargeV3TurboQuantized
+        );
+    }
+
+    #[test]
+    fn parakeet_mlx_alias_maps_to_parakeet() {
+        // The parakeet-mlx variant collapsed into Parakeet (runtime backend); alias kept for back-compat.
+        assert_eq!(
+            "parakeet-mlx".parse::<AudioTranscriptionEngine>().unwrap(),
+            AudioTranscriptionEngine::Parakeet
         );
     }
 
