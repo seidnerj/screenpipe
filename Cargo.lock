@@ -277,7 +277,7 @@ dependencies = [
 [[package]]
 name = "antirez-asr-sys"
 version = "0.1.0"
-source = "git+https://github.com/divanshu-go/audiopipe.git?rev=2fd5c360651157a5df504394066e509ad4d1bdc9#2fd5c360651157a5df504394066e509ad4d1bdc9"
+source = "git+https://github.com/seidnerj/audiopipe.git?rev=70306096afa802ee76f8f3e0b545d4ede127a348#70306096afa802ee76f8f3e0b545d4ede127a348"
 dependencies = [
  "cc",
 ]
@@ -645,6 +645,23 @@ dependencies = [
 name = "audiopipe"
 version = "0.2.0"
 source = "git+https://github.com/divanshu-go/audiopipe.git?rev=2fd5c360651157a5df504394066e509ad4d1bdc9#2fd5c360651157a5df504394066e509ad4d1bdc9"
+dependencies = [
+ "half",
+ "hf-hub 0.4.3",
+ "ndarray",
+ "ort",
+ "ort-sys",
+ "realfft",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tracing",
+]
+
+[[package]]
+name = "audiopipe"
+version = "0.2.0"
+source = "git+https://github.com/seidnerj/audiopipe.git?rev=70306096afa802ee76f8f3e0b545d4ede127a348#70306096afa802ee76f8f3e0b545d4ede127a348"
 dependencies = [
  "antirez-asr-sys",
  "half",
@@ -7139,7 +7156,7 @@ checksum = "478e0585659a122aa407eb7e3c0e1fa51b1d8a870038bd29f0cf4a8551eea972"
 [[package]]
 name = "qwen3-asr-sys"
 version = "0.1.0"
-source = "git+https://github.com/divanshu-go/audiopipe.git?rev=2fd5c360651157a5df504394066e509ad4d1bdc9#2fd5c360651157a5df504394066e509ad4d1bdc9"
+source = "git+https://github.com/seidnerj/audiopipe.git?rev=70306096afa802ee76f8f3e0b545d4ede127a348#70306096afa802ee76f8f3e0b545d4ede127a348"
 dependencies = [
  "cc",
  "cmake",
@@ -8161,7 +8178,7 @@ name = "screenpipe-audio"
 version = "0.4.16"
 dependencies = [
  "anyhow",
- "audiopipe",
+ "audiopipe 0.2.0 (git+https://github.com/seidnerj/audiopipe.git?rev=70306096afa802ee76f8f3e0b545d4ede127a348)",
  "bytemuck",
  "bytes",
  "chrono",
@@ -8223,7 +8240,7 @@ name = "screenpipe-audio-eval"
 version = "0.4.16"
 dependencies = [
  "anyhow",
- "audiopipe",
+ "audiopipe 0.2.0 (git+https://github.com/divanshu-go/audiopipe.git?rev=2fd5c360651157a5df504394066e509ad4d1bdc9)",
  "chrono",
  "clap",
  "hound",
