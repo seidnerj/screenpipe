@@ -28,7 +28,7 @@ use clap::Parser;
 use screenpipe_audio::core::engine::AudioTranscriptionEngine;
 use screenpipe_audio::transcription::engine::TranscriptionEngine;
 use screenpipe_audio::transcription::whisper::model::{
-    download_whisper_model, get_cached_whisper_model_path,
+    download_whisper_model, get_cached_whisper_model_path, resolve_whisper_filename,
 };
 use screenpipe_audio_eval::{load_utterances, score_transcription, LibriUtterance};
 use serde::Serialize;
@@ -154,11 +154,11 @@ async fn prime_model(engine: &AudioTranscriptionEngine) -> Result<()> {
         }
         _ => {
             let arc = Arc::new(engine.clone());
-            if get_cached_whisper_model_path(&arc).is_some() {
+            let f = resolve_whisper_filename(&arc, &[]).ok_or_else(|| anyhow::anyhow!("no size class for engine {:?}", engine))?;
+            if get_cached_whisper_model_path(&f).is_some() {
                 return Ok(());
             }
-            let arc_for_download = arc.clone();
-            tokio::task::spawn_blocking(move || download_whisper_model(arc_for_download))
+            tokio::task::spawn_blocking(move || download_whisper_model(&f))
                 .await
                 .map_err(|e| anyhow::anyhow!("whisper download task panicked: {e}"))?
                 .context("download whisper model")?;

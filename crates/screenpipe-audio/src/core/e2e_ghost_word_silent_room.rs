@@ -22,7 +22,7 @@ use crate::{
         stream::AudioStream,
     },
     metrics::AudioPipelineMetrics,
-    transcription::{engine::TranscriptionEngine, whisper::model::get_cached_whisper_model_path},
+    transcription::{engine::TranscriptionEngine, whisper::model::{get_cached_whisper_model_path, resolve_whisper_filename}},
     AudioInput,
 };
 use screenpipe_core::Language;
@@ -72,7 +72,7 @@ async fn silent_room_no_ghost_words() {
     }
 
     let engine_config = Arc::new(AudioTranscriptionEngine::WhisperTiny);
-    if get_cached_whisper_model_path(&engine_config).is_none() {
+    if resolve_whisper_filename(&engine_config, &[]).and_then(|f| get_cached_whisper_model_path(&f)).is_none() {
         eprintln!("SKIP: ggml-tiny.bin not cached. Run screenpipe once to download it.");
         return;
     }

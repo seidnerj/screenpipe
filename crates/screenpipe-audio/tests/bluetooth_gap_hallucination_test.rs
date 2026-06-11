@@ -134,14 +134,15 @@ async fn whisper_hallucination_before_after() {
     use screenpipe_audio::core::engine::AudioTranscriptionEngine;
     use screenpipe_audio::transcription::model_resolution::Backend;
     use screenpipe_audio::transcription::whisper::model::create_whisper_context_parameters;
-    use screenpipe_audio::transcription::whisper::model::get_cached_whisper_model_path;
+    use screenpipe_audio::transcription::whisper::model::{get_cached_whisper_model_path, resolve_whisper_filename};
     use screenpipe_core::Language;
     use std::sync::Arc;
     use whisper_rs::WhisperContext;
 
     // ── Locate the cached Whisper tiny model ────────────────────────────────
     let engine_config = Arc::new(AudioTranscriptionEngine::WhisperTiny);
-    let model_path = get_cached_whisper_model_path(&engine_config)
+    let f = resolve_whisper_filename(&engine_config, &[]).expect("size class");
+    let model_path = get_cached_whisper_model_path(&f)
         .expect("ggml-tiny.bin not found in cache — run screenpipe once to download it, then re-run with --ignored");
 
     println!("using whisper model: {:?}", model_path);
