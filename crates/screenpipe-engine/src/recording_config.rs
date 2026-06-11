@@ -63,6 +63,9 @@ pub struct RecordingConfig {
     pub audio_transcription_engine: AudioTranscriptionEngine,
     pub transcription_mode: TranscriptionMode,
     pub meeting_streaming: MeetingStreamingConfig,
+    /// Resolved-at-runtime compute placement for local models (CPU vs GPU).
+    /// Consumed when constructing the transcription engine.
+    pub compute: screenpipe_audio::transcription::model_resolution::ComputePref,
 
     // Devices & monitors
     pub audio_devices: Vec<String>,
@@ -232,6 +235,7 @@ impl RecordingConfig {
         settings: &screenpipe_config::RecordingSettings,
         data_dir: std::path::PathBuf,
         audio_engine_override: Option<&str>,
+        compute: screenpipe_audio::transcription::model_resolution::ComputePref,
     ) -> Self {
         let engine_str = audio_engine_override.unwrap_or(&settings.audio_transcription_engine);
 
@@ -371,6 +375,7 @@ impl RecordingConfig {
                 std::net::Ipv4Addr::LOCALHOST
             },
             encrypt_secrets: false, // desktop app handles keychain via Tauri commands
+            compute,
         }
     }
 
@@ -503,7 +508,12 @@ mod tests {
     }
 
     fn build(s: &screenpipe_config::RecordingSettings) -> RecordingConfig {
-        RecordingConfig::from_settings(s, std::path::PathBuf::from("/tmp/sp_test"), None)
+        RecordingConfig::from_settings(
+            s,
+            std::path::PathBuf::from("/tmp/sp_test"),
+            None,
+            screenpipe_audio::transcription::model_resolution::ComputePref::Auto,
+        )
     }
 
     #[test]

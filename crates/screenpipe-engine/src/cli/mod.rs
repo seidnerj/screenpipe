@@ -121,6 +121,28 @@ impl From<CliAudioTranscriptionEngine> for CoreAudioTranscriptionEngine {
     }
 }
 
+#[derive(clap::ValueEnum, Clone, Debug, Default, PartialEq)]
+pub enum ComputeArg {
+    /// Prefer GPU (Metal), fall back to CPU.
+    #[default]
+    Auto,
+    /// Force GPU; error at resolution time if no GPU is available.
+    Gpu,
+    /// Force CPU.
+    Cpu,
+}
+
+impl From<ComputeArg> for screenpipe_audio::transcription::model_resolution::ComputePref {
+    fn from(a: ComputeArg) -> Self {
+        use screenpipe_audio::transcription::model_resolution::ComputePref;
+        match a {
+            ComputeArg::Auto => ComputePref::Auto,
+            ComputeArg::Gpu => ComputePref::Gpu,
+            ComputeArg::Cpu => ComputePref::Cpu,
+        }
+    }
+}
+
 #[derive(Clone, Debug, ValueEnum, PartialEq)]
 pub enum CliTranscriptionMode {
     /// Transcribe immediately as audio is captured
@@ -386,6 +408,11 @@ pub struct RecordArgs {
     /// Audio transcription engine to use
     #[arg(short = 'a', long, value_enum, default_value_t = default_audio_engine())]
     pub audio_transcription_engine: CliAudioTranscriptionEngine,
+
+    /// Compute backend for local transcription models. `auto` prefers GPU (Metal)
+    /// and falls back to CPU; `gpu` errors if no GPU is available; `cpu` forces CPU.
+    #[arg(long, value_enum, default_value_t = ComputeArg::Auto)]
+    pub compute: ComputeArg,
 
     /// Monitor IDs to record. May be specified multiple times.
     /// When set, only the listed monitors are recorded (implies
@@ -1076,7 +1103,12 @@ impl RecordArgs {
         }
 
         let mut config =
-            crate::recording_config::RecordingConfig::from_settings(&settings, data_dir, None);
+            crate::recording_config::RecordingConfig::from_settings(
+                &settings,
+                data_dir,
+                None,
+                self.compute.clone().into(),
+            );
         // Mirror the CLI flag, but never let the user turn auth OFF when
         // the API is bound to the LAN — that would publish an unauthenticated
         // service. `from_settings` already enforces this; we reapply it
