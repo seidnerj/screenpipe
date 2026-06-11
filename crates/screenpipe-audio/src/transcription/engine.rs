@@ -76,6 +76,9 @@ pub enum TranscriptionEngine {
         config: Arc<AudioTranscriptionEngine>,
         languages: Vec<Language>,
         vocabulary: Vec<VocabularyEntry>,
+        /// Decode language pinned by the resolver (single requested language). When
+        /// Some, whisper decode is forced to this language instead of auto-detecting.
+        pinned_language: Option<String>,
     },
     #[cfg(feature = "qwen3-asr")]
     Qwen3Asr {
@@ -204,57 +207,47 @@ impl TranscriptionEngine {
                 }
             }
 
-            AudioTranscriptionEngine::Parakeet => {
-                // Auto-upgrade to MLX (GPU) when the feature is compiled in
-                #[cfg(feature = "parakeet-mlx")]
+            AudioTranscriptionEngine::Parakeet | AudioTranscriptionEngine::ParakeetMlx => {
+                #[cfg(any(feature = "parakeet", feature = "parakeet-mlx"))]
                 {
-                    info!("transcription engine runtime: Parakeet (MLX / Metal GPU)");
-                    const MODEL_NAME: &str = "parakeet-tdt-0.6b-v3-mlx";
-                    let load_result = tokio::task::spawn_blocking(|| {
-                        audiopipe::Model::from_pretrained_cache_only(MODEL_NAME)
-                    })
-                    .await
-                    .map_err(|e| anyhow!("parakeet-mlx model loading task panicked: {}", e))?;
-                    match load_result {
-                        Ok(model) => {
-                            // Cap MLX buffer cache to 2 GB — prevents the caching allocator
-                            // from accumulating 10+ GB of GPU memory over time.
-                            // Model weights (~1.2 GB) are active memory, not cache.
-                            const MLX_CACHE_LIMIT: usize = 2 * 1024 * 1024 * 1024;
-                            let prev = mlx_memory::set_cache_limit(MLX_CACHE_LIMIT);
-                            info!(
-                                "parakeet-tdt-0.6b-v3-mlx (GPU) model loaded successfully, \
-                                 mlx cache limit set to 2GB (was {}MB)",
-                                prev / 1048576
-                            );
-                            mlx_memory::log_memory_stats("after model load");
-                            Ok(Self::ParakeetMlx {
-                                model: Arc::new(StdMutex::new(model)),
-                                vocabulary,
-                            })
-                        }
-                        Err(e) if e.is_model_not_cached() => {
-                            warn!(
-                                "parakeet-mlx weights not in Hugging Face cache yet; transcription disabled until download completes"
-                            );
-                            audiopipe::Model::spawn_pretrained_download(MODEL_NAME.to_string());
-                            Ok(Self::Disabled)
-                        }
-                        Err(e) => Err(anyhow!("failed to load parakeet-mlx model: {}", e)),
-                    }
-                }
-                #[cfg(all(feature = "parakeet", not(feature = "parakeet-mlx")))]
-                {
-                    info!("transcription engine runtime: Parakeet (CPU)");
-                    const MODEL_NAME: &str = "parakeet-tdt-0.6b-v3";
-                    let load_result = tokio::task::spawn_blocking(|| {
-                        audiopipe::Model::from_pretrained_cache_only(MODEL_NAME)
+                    use crate::transcription::model_resolution::resolve_model;
+                    let sc = config
+                        .size_class()
+                        .ok_or_else(|| anyhow!("parakeet engine has no size class"))?;
+                    let langs: Vec<&str> = languages.iter().map(|l| l.as_lang_code()).collect();
+                    // Parakeet GPU = MLX/Metal, available only when the parakeet-mlx backend
+                    // is compiled in (macOS). Injected into the pure resolver.
+                    let gpu_available = cfg!(all(target_os = "macos", feature = "parakeet-mlx"));
+                    let resolved = resolve_model(&sc, compute, &langs, gpu_available)
+                        .map_err(|e| anyhow!("parakeet model resolution failed: {:?}", e))?;
+                    let backend = resolved.backend();
+                    let model_id = resolved.model_id().to_string();
+                    info!(
+                        "transcription engine runtime: Parakeet model={} backend={:?} langs={:?}",
+                        model_id, backend, langs
+                    );
+                    let load_id = model_id.clone();
+                    let load_result = tokio::task::spawn_blocking(move || {
+                        audiopipe::Model::from_pretrained_cache_only(&load_id)
                     })
                     .await
                     .map_err(|e| anyhow!("parakeet model loading task panicked: {}", e))?;
                     match load_result {
                         Ok(model) => {
-                            info!("parakeet-tdt-0.6b-v3 (multilingual) model loaded successfully");
+                            // MLX (GPU) only: cap the buffer cache to 2 GB to stop the caching
+                            // allocator accumulating 10+ GB of GPU memory over time.
+                            #[cfg(feature = "parakeet-mlx")]
+                            if backend == crate::transcription::model_resolution::Backend::Gpu {
+                                const MLX_CACHE_LIMIT: usize = 2 * 1024 * 1024 * 1024;
+                                let prev = mlx_memory::set_cache_limit(MLX_CACHE_LIMIT);
+                                info!(
+                                    "{} (GPU/MLX) loaded; mlx cache limit set to 2GB (was {}MB)",
+                                    model_id,
+                                    prev / 1048576
+                                );
+                                mlx_memory::log_memory_stats("after model load");
+                            }
+                            info!("parakeet model '{}' loaded successfully", model_id);
                             Ok(Self::Parakeet {
                                 model: Arc::new(StdMutex::new(model)),
                                 vocabulary,
@@ -262,9 +255,10 @@ impl TranscriptionEngine {
                         }
                         Err(e) if e.is_model_not_cached() => {
                             warn!(
-                                "parakeet weights not in Hugging Face cache yet; transcription disabled until download completes"
+                                "parakeet weights for '{}' not in HF cache yet; transcription disabled until download completes",
+                                model_id
                             );
-                            audiopipe::Model::spawn_pretrained_download(MODEL_NAME.to_string());
+                            audiopipe::Model::spawn_pretrained_download(model_id);
                             Ok(Self::Disabled)
                         }
                         Err(e) => Err(anyhow!("failed to load parakeet model: {}", e)),
@@ -278,52 +272,23 @@ impl TranscriptionEngine {
                 }
             }
 
-            AudioTranscriptionEngine::ParakeetMlx => {
-                #[cfg(feature = "parakeet-mlx")]
-                {
-                    info!("transcription engine runtime: Parakeet MLX (GPU)");
-                    const MODEL_NAME: &str = "parakeet-tdt-0.6b-v3-mlx";
-                    let load_result = tokio::task::spawn_blocking(|| {
-                        audiopipe::Model::from_pretrained_cache_only(MODEL_NAME)
-                    })
-                    .await
-                    .map_err(|e| anyhow!("parakeet-mlx model loading task panicked: {}", e))?;
-                    match load_result {
-                        Ok(model) => {
-                            const MLX_CACHE_LIMIT: usize = 2 * 1024 * 1024 * 1024;
-                            let prev = mlx_memory::set_cache_limit(MLX_CACHE_LIMIT);
-                            info!(
-                                "parakeet-tdt-0.6b-v3-mlx (GPU) model loaded successfully, \
-                                 mlx cache limit set to 2GB (was {}MB)",
-                                prev / 1048576
-                            );
-                            mlx_memory::log_memory_stats("after model load");
-                            Ok(Self::ParakeetMlx {
-                                model: Arc::new(StdMutex::new(model)),
-                                vocabulary,
-                            })
-                        }
-                        Err(e) if e.is_model_not_cached() => {
-                            warn!(
-                                "parakeet-mlx weights not in Hugging Face cache yet; transcription disabled until download completes"
-                            );
-                            audiopipe::Model::spawn_pretrained_download(MODEL_NAME.to_string());
-                            Ok(Self::Disabled)
-                        }
-                        Err(e) => Err(anyhow!("failed to load parakeet-mlx model: {}", e)),
-                    }
-                }
-                #[cfg(not(feature = "parakeet-mlx"))]
-                {
-                    Err(anyhow!(
-                        "parakeet-mlx engine selected but the 'parakeet-mlx' feature is not enabled"
-                    ))
-                }
-            }
-
             // All Whisper variants
             _ => {
-                info!("transcription engine runtime: Whisper variant={}", *config);
+                use crate::transcription::model_resolution::resolve_model;
+                let sc = config
+                    .size_class()
+                    .ok_or_else(|| anyhow!("whisper engine has no size class"))?;
+                let langs: Vec<&str> = languages.iter().map(|l| l.as_lang_code()).collect();
+                // Whisper GPU = Metal, available when the `metal` backend is compiled in (macOS).
+                let gpu_available = cfg!(all(target_os = "macos", feature = "metal"));
+                let resolved = resolve_model(&sc, compute, &langs, gpu_available)
+                    .map_err(|e| anyhow!("whisper model resolution failed: {:?}", e))?;
+                let whisper_backend = resolved.backend();
+                let pinned_language = resolved.pinned_language.clone();
+                info!(
+                    "transcription engine runtime: Whisper variant={} resolved_model={} backend={:?} pin={:?}",
+                    *config, resolved.model_id(), whisper_backend, pinned_language
+                );
                 let quantized_path = match get_cached_whisper_model_path(&config) {
                     Some(path) => path,
                     None => {
@@ -356,7 +321,7 @@ impl TranscriptionEngine {
 
                 info!("whisper model available: {:?}", quantized_path);
 
-                let context_param = create_whisper_context_parameters(config.clone())?;
+                let context_param = create_whisper_context_parameters(whisper_backend)?;
 
                 info!("loading whisper model with GPU acceleration...");
                 let context = tokio::task::spawn_blocking(move || {
@@ -380,6 +345,7 @@ impl TranscriptionEngine {
                     config,
                     languages,
                     vocabulary,
+                    pinned_language,
                 })
             }
         }
@@ -395,6 +361,7 @@ impl TranscriptionEngine {
                 config,
                 languages,
                 vocabulary,
+                ..
             } => {
                 let state = context
                     .create_state()
