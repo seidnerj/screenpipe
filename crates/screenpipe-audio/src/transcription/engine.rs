@@ -358,7 +358,7 @@ impl TranscriptionEngine {
                 config,
                 languages,
                 vocabulary,
-                ..
+                pinned_language,
             } => {
                 let state = context
                     .create_state()
@@ -369,6 +369,7 @@ impl TranscriptionEngine {
                     config: config.clone(),
                     languages: languages.clone(),
                     vocabulary: vocabulary.clone(),
+                    pinned_language: pinned_language.clone(),
                 })
             }
             #[cfg(feature = "qwen3-asr")]
@@ -451,6 +452,9 @@ pub enum TranscriptionSession {
         config: Arc<AudioTranscriptionEngine>,
         languages: Vec<Language>,
         vocabulary: Vec<VocabularyEntry>,
+        /// Decode language pinned by the resolver (single requested language). When
+        /// Some, whisper decode is forced to this language instead of auto-detecting.
+        pinned_language: Option<String>,
     },
     #[cfg(feature = "qwen3-asr")]
     Qwen3Asr {
@@ -667,8 +671,9 @@ impl TranscriptionSession {
                 state,
                 languages,
                 vocabulary,
+                pinned_language,
                 ..
-            } => process_with_whisper(audio, languages.clone(), state, vocabulary).await,
+            } => process_with_whisper(audio, languages.clone(), state, vocabulary, pinned_language.as_deref()).await,
 
             Self::OpenAICompatible {
                 endpoint,

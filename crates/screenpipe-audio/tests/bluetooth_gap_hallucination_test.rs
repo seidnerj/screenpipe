@@ -171,6 +171,7 @@ async fn whisper_hallucination_before_after() {
         vec![Language::English],
         &mut state,
         &[],
+        None,
     )
     .await
     .expect("whisper call failed on crackle");
@@ -181,6 +182,7 @@ async fn whisper_hallucination_before_after() {
         vec![Language::English],
         &mut state,
         &[],
+        None,
     )
     .await
     .expect("whisper call failed on silence");
