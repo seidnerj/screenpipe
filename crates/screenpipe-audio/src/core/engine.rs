@@ -9,6 +9,9 @@ pub enum AudioTranscriptionEngine {
     Deepgram,
     WhisperTiny,
     WhisperTinyQuantized,
+    WhisperBase,
+    WhisperSmall,
+    WhisperMedium,
     #[default]
     WhisperLargeV3Turbo,
     WhisperLargeV3TurboQuantized,
@@ -28,6 +31,9 @@ impl std::str::FromStr for AudioTranscriptionEngine {
             "deepgram" | "screenpipe-cloud" => Ok(Self::Deepgram),
             "whisper-tiny" => Ok(Self::WhisperTiny),
             "whisper-tiny-quantized" => Ok(Self::WhisperTinyQuantized),
+            "whisper-base" => Ok(Self::WhisperBase),
+            "whisper-small" => Ok(Self::WhisperSmall),
+            "whisper-medium" => Ok(Self::WhisperMedium),
             "whisper-large" => Ok(Self::WhisperLargeV3),
             "whisper-large-quantized" => Ok(Self::WhisperLargeV3Quantized),
             "whisper-large-v3-turbo" => Ok(Self::WhisperLargeV3Turbo),
@@ -48,6 +54,9 @@ impl fmt::Display for AudioTranscriptionEngine {
             AudioTranscriptionEngine::Deepgram => write!(f, "Deepgram"),
             AudioTranscriptionEngine::WhisperTiny => write!(f, "WhisperTiny"),
             AudioTranscriptionEngine::WhisperTinyQuantized => write!(f, "WhisperTinyQuantized"),
+            AudioTranscriptionEngine::WhisperBase => write!(f, "WhisperBase"),
+            AudioTranscriptionEngine::WhisperSmall => write!(f, "WhisperSmall"),
+            AudioTranscriptionEngine::WhisperMedium => write!(f, "WhisperMedium"),
             AudioTranscriptionEngine::WhisperLargeV3 => write!(f, "WhisperLargeV3"),
             AudioTranscriptionEngine::WhisperLargeV3Quantized => {
                 write!(f, "WhisperLargeV3Quantized")
@@ -61,6 +70,50 @@ impl fmt::Display for AudioTranscriptionEngine {
             AudioTranscriptionEngine::Parakeet => write!(f, "Parakeet"),
             AudioTranscriptionEngine::ParakeetMlx => write!(f, "ParakeetMlx"),
             AudioTranscriptionEngine::Disabled => write!(f, "Disabled"),
+        }
+    }
+}
+
+impl AudioTranscriptionEngine {
+    /// The (family, size, quant) this engine maps to for model resolution.
+    /// Returns `None` for cloud / non-local engines that the resolver does not handle.
+    pub fn size_class(&self) -> Option<crate::transcription::model_resolution::SizeClass> {
+        use crate::transcription::model_resolution::{Family, SizeClass};
+        let sc = |family, size: &str, quant: Option<&str>| SizeClass {
+            family,
+            size: size.to_string(),
+            quant: quant.map(|q| q.to_string()),
+        };
+        match self {
+            AudioTranscriptionEngine::WhisperTiny => Some(sc(Family::Whisper, "tiny", None)),
+            AudioTranscriptionEngine::WhisperTinyQuantized => {
+                Some(sc(Family::Whisper, "tiny", Some("q8_0")))
+            }
+            AudioTranscriptionEngine::WhisperBase => Some(sc(Family::Whisper, "base", None)),
+            AudioTranscriptionEngine::WhisperSmall => Some(sc(Family::Whisper, "small", None)),
+            AudioTranscriptionEngine::WhisperMedium => Some(sc(Family::Whisper, "medium", None)),
+            AudioTranscriptionEngine::WhisperLargeV3 => {
+                Some(sc(Family::Whisper, "large-v3", None))
+            }
+            AudioTranscriptionEngine::WhisperLargeV3Quantized => {
+                Some(sc(Family::Whisper, "large-v3", Some("q5_0")))
+            }
+            AudioTranscriptionEngine::WhisperLargeV3Turbo => {
+                Some(sc(Family::Whisper, "large-v3-turbo", None))
+            }
+            AudioTranscriptionEngine::WhisperLargeV3TurboQuantized => {
+                Some(sc(Family::Whisper, "large-v3-turbo", Some("q8_0")))
+            }
+            AudioTranscriptionEngine::Parakeet => {
+                Some(sc(Family::Parakeet, "0.6b", None))
+            }
+            AudioTranscriptionEngine::ParakeetMlx => {
+                Some(sc(Family::Parakeet, "0.6b", None))
+            }
+            AudioTranscriptionEngine::Deepgram
+            | AudioTranscriptionEngine::OpenAICompatible
+            | AudioTranscriptionEngine::Qwen3Asr
+            | AudioTranscriptionEngine::Disabled => None,
         }
     }
 }
@@ -152,5 +205,78 @@ mod tests {
         let result = "nonexistent".parse::<AudioTranscriptionEngine>();
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("unknown audio engine"));
+    }
+
+    #[test]
+    fn from_str_whisper_base() {
+        assert_eq!(
+            "whisper-base".parse::<AudioTranscriptionEngine>().unwrap(),
+            AudioTranscriptionEngine::WhisperBase
+        );
+    }
+
+    #[test]
+    fn from_str_whisper_small() {
+        assert_eq!(
+            "whisper-small".parse::<AudioTranscriptionEngine>().unwrap(),
+            AudioTranscriptionEngine::WhisperSmall
+        );
+    }
+
+    #[test]
+    fn from_str_whisper_medium() {
+        assert_eq!(
+            "whisper-medium"
+                .parse::<AudioTranscriptionEngine>()
+                .unwrap(),
+            AudioTranscriptionEngine::WhisperMedium
+        );
+    }
+
+    #[test]
+    fn size_class_whisper_small_is_small_multilingual() {
+        use crate::transcription::model_resolution::{Family, SizeClass};
+        assert_eq!(
+            AudioTranscriptionEngine::WhisperSmall.size_class(),
+            Some(SizeClass {
+                family: Family::Whisper,
+                size: "small".into(),
+                quant: None
+            })
+        );
+    }
+
+    #[test]
+    fn size_class_tiny_quantized_carries_quant() {
+        use crate::transcription::model_resolution::{Family, SizeClass};
+        assert_eq!(
+            AudioTranscriptionEngine::WhisperTinyQuantized.size_class(),
+            Some(SizeClass {
+                family: Family::Whisper,
+                size: "tiny".into(),
+                quant: Some("q8_0".into())
+            })
+        );
+    }
+
+    #[test]
+    fn size_class_parakeet_is_parakeet_family() {
+        use crate::transcription::model_resolution::{Family, SizeClass};
+        assert_eq!(
+            AudioTranscriptionEngine::Parakeet.size_class(),
+            Some(SizeClass {
+                family: Family::Parakeet,
+                size: "0.6b".into(),
+                quant: None
+            })
+        );
+    }
+
+    #[test]
+    fn size_class_cloud_engines_are_none() {
+        assert_eq!(AudioTranscriptionEngine::Deepgram.size_class(), None);
+        assert_eq!(AudioTranscriptionEngine::OpenAICompatible.size_class(), None);
+        assert_eq!(AudioTranscriptionEngine::Qwen3Asr.size_class(), None);
+        assert_eq!(AudioTranscriptionEngine::Disabled.size_class(), None);
     }
 }

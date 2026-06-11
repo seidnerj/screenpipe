@@ -10,11 +10,14 @@ use whisper_rs::WhisperContextParameters;
 
 fn whisper_model_filename(engine: &AudioTranscriptionEngine) -> &'static str {
     match *engine {
-        AudioTranscriptionEngine::WhisperLargeV3Turbo => "ggml-large-v3-turbo.bin",
         AudioTranscriptionEngine::WhisperTiny => "ggml-tiny.bin",
         AudioTranscriptionEngine::WhisperTinyQuantized => "ggml-tiny-q8_0.bin",
+        AudioTranscriptionEngine::WhisperBase => "ggml-base.bin",
+        AudioTranscriptionEngine::WhisperSmall => "ggml-small.bin",
+        AudioTranscriptionEngine::WhisperMedium => "ggml-medium.bin",
         AudioTranscriptionEngine::WhisperLargeV3 => "ggml-large-v3.bin",
         AudioTranscriptionEngine::WhisperLargeV3Quantized => "ggml-large-v3-q5_0.bin",
+        AudioTranscriptionEngine::WhisperLargeV3Turbo => "ggml-large-v3-turbo.bin",
         // Only called for Whisper variants now — non-Whisper engines never reach here.
         _ => "ggml-large-v3-turbo-q8_0.bin",
     }

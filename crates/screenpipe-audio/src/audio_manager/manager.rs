@@ -1241,6 +1241,9 @@ impl AudioManager {
                 audio_transcription_engine.as_ref(),
                 AudioTranscriptionEngine::WhisperTiny
                     | AudioTranscriptionEngine::WhisperTinyQuantized
+                    | AudioTranscriptionEngine::WhisperBase
+                    | AudioTranscriptionEngine::WhisperSmall
+                    | AudioTranscriptionEngine::WhisperMedium
                     | AudioTranscriptionEngine::WhisperLargeV3Turbo
                     | AudioTranscriptionEngine::WhisperLargeV3TurboQuantized
                     | AudioTranscriptionEngine::WhisperLargeV3

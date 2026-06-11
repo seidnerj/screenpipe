@@ -41,6 +41,12 @@ pub enum CliAudioTranscriptionEngine {
     WhisperTiny,
     #[clap(name = "whisper-tiny-quantized")]
     WhisperTinyQuantized,
+    #[clap(name = "whisper-base")]
+    WhisperBase,
+    #[clap(name = "whisper-small")]
+    WhisperSmall,
+    #[clap(name = "whisper-medium")]
+    WhisperMedium,
     #[clap(name = "whisper-large")]
     WhisperLargeV3,
     #[clap(name = "whisper-large-quantized")]
@@ -78,6 +84,9 @@ fn cli_engine_to_str(engine: &CliAudioTranscriptionEngine) -> &'static str {
         CliAudioTranscriptionEngine::Deepgram => "deepgram",
         CliAudioTranscriptionEngine::WhisperTiny => "whisper-tiny",
         CliAudioTranscriptionEngine::WhisperTinyQuantized => "whisper-tiny-quantized",
+        CliAudioTranscriptionEngine::WhisperBase => "whisper-base",
+        CliAudioTranscriptionEngine::WhisperSmall => "whisper-small",
+        CliAudioTranscriptionEngine::WhisperMedium => "whisper-medium",
         CliAudioTranscriptionEngine::WhisperLargeV3 => "whisper-large",
         CliAudioTranscriptionEngine::WhisperLargeV3Quantized => "whisper-large-quantized",
         CliAudioTranscriptionEngine::WhisperLargeV3Turbo => "whisper-large-v3-turbo",
@@ -98,6 +107,11 @@ impl From<CliAudioTranscriptionEngine> for CoreAudioTranscriptionEngine {
             CliAudioTranscriptionEngine::WhisperTiny => CoreAudioTranscriptionEngine::WhisperTiny,
             CliAudioTranscriptionEngine::WhisperTinyQuantized => {
                 CoreAudioTranscriptionEngine::WhisperTinyQuantized
+            }
+            CliAudioTranscriptionEngine::WhisperBase => CoreAudioTranscriptionEngine::WhisperBase,
+            CliAudioTranscriptionEngine::WhisperSmall => CoreAudioTranscriptionEngine::WhisperSmall,
+            CliAudioTranscriptionEngine::WhisperMedium => {
+                CoreAudioTranscriptionEngine::WhisperMedium
             }
             CliAudioTranscriptionEngine::WhisperLargeV3 => {
                 CoreAudioTranscriptionEngine::WhisperLargeV3
