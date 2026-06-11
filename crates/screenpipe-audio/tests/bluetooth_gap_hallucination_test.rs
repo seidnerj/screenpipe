@@ -132,6 +132,7 @@ async fn silero_rejects_silence() {
 #[ignore = "Whisper tiny cached"]
 async fn whisper_hallucination_before_after() {
     use screenpipe_audio::core::engine::AudioTranscriptionEngine;
+    use screenpipe_audio::transcription::model_resolution::Backend;
     use screenpipe_audio::transcription::whisper::model::create_whisper_context_parameters;
     use screenpipe_audio::transcription::whisper::model::get_cached_whisper_model_path;
     use screenpipe_core::Language;
@@ -146,7 +147,7 @@ async fn whisper_hallucination_before_after() {
     println!("using whisper model: {:?}", model_path);
 
     // ── Load WhisperContext + create a session ───────────────────────────────
-    let ctx_params = create_whisper_context_parameters(engine_config.clone())
+    let ctx_params = create_whisper_context_parameters(Backend::Gpu)
         .expect("failed to build context params");
     let ctx = WhisperContext::new_with_params(model_path.to_str().unwrap(), ctx_params)
         .expect("failed to load whisper tiny model");
