@@ -123,7 +123,11 @@ struct CatalogEntry {
     quant: Option<&'static str>,
     backend: Backend,
     coverage: LangSet,
-    /// ggml filename for whisper; audiopipe/HF model name for parakeet.
+    /// For whisper: the ggml filename (downloaded from ggerganov/whisper.cpp).
+    /// For parakeet: the SHORT name `audiopipe::Model::from_pretrained*` accepts —
+    /// `parakeet-tdt-0.6b-v{2,3}` for ONNX/CPU, and the same with a `-mlx` suffix
+    /// for MLX/GPU (audiopipe routes any name containing "mlx" to the MLX loader,
+    /// stripping the suffix). NOT a full HuggingFace repo path.
     model_id: &'static str,
 }
 
@@ -140,10 +144,10 @@ const PARAKEET_V3: &[&str] = &[
 // ggerganov/whisper.cpp file list.
 const CATALOG: &[CatalogEntry] = &[
     // ---- Parakeet (audiopipe) ----
-    CatalogEntry { family: Family::Parakeet, size: "0.6b", quant: None, backend: Backend::Cpu, coverage: LangSet::Codes(&["en"]), model_id: "istupakov/parakeet-tdt-0.6b-v2-onnx" },
-    CatalogEntry { family: Family::Parakeet, size: "0.6b", quant: None, backend: Backend::Gpu, coverage: LangSet::Codes(&["en"]), model_id: "mlx-community/parakeet-tdt-0.6b-v2" },
-    CatalogEntry { family: Family::Parakeet, size: "0.6b", quant: None, backend: Backend::Cpu, coverage: LangSet::Codes(PARAKEET_V3), model_id: "istupakov/parakeet-tdt-0.6b-v3-onnx" },
-    CatalogEntry { family: Family::Parakeet, size: "0.6b", quant: None, backend: Backend::Gpu, coverage: LangSet::Codes(PARAKEET_V3), model_id: "mlx-community/parakeet-tdt-0.6b-v3" },
+    CatalogEntry { family: Family::Parakeet, size: "0.6b", quant: None, backend: Backend::Cpu, coverage: LangSet::Codes(&["en"]), model_id: "parakeet-tdt-0.6b-v2" },
+    CatalogEntry { family: Family::Parakeet, size: "0.6b", quant: None, backend: Backend::Gpu, coverage: LangSet::Codes(&["en"]), model_id: "parakeet-tdt-0.6b-v2-mlx" },
+    CatalogEntry { family: Family::Parakeet, size: "0.6b", quant: None, backend: Backend::Cpu, coverage: LangSet::Codes(PARAKEET_V3), model_id: "parakeet-tdt-0.6b-v3" },
+    CatalogEntry { family: Family::Parakeet, size: "0.6b", quant: None, backend: Backend::Gpu, coverage: LangSet::Codes(PARAKEET_V3), model_id: "parakeet-tdt-0.6b-v3-mlx" },
     // ---- Whisper (ggerganov/whisper.cpp ggml files); multilingual + .en per size ----
     // tiny
     CatalogEntry { family: Family::Whisper, size: "tiny", quant: None, backend: Backend::Cpu, coverage: LangSet::All, model_id: "ggml-tiny.bin" },
@@ -275,7 +279,7 @@ mod resolve_tests {
     #[test]
     fn english_parakeet_cpu_picks_v2_onnx() {
         let r = resolve_model(&parakeet("0.6b"), ComputePref::Cpu, &["en"], true).unwrap();
-        assert_eq!(r.model_id(), "istupakov/parakeet-tdt-0.6b-v2-onnx");
+        assert_eq!(r.model_id(), "parakeet-tdt-0.6b-v2");
         assert_eq!(r.backend(), Backend::Cpu);
         assert_eq!(r.pinned_language.as_deref(), Some("en"));
     }
@@ -283,7 +287,7 @@ mod resolve_tests {
     #[test]
     fn english_parakeet_gpu_picks_v2_mlx() {
         let r = resolve_model(&parakeet("0.6b"), ComputePref::Gpu, &["en"], true).unwrap();
-        assert_eq!(r.model_id(), "mlx-community/parakeet-tdt-0.6b-v2");
+        assert_eq!(r.model_id(), "parakeet-tdt-0.6b-v2-mlx");
         assert_eq!(r.backend(), Backend::Gpu);
     }
 
@@ -323,7 +327,7 @@ mod resolve_tests {
     #[test]
     fn multi_lang_parakeet_en_fr_uses_v3() {
         let r = resolve_model(&parakeet("0.6b"), ComputePref::Cpu, &["en", "fr"], true).unwrap();
-        assert_eq!(r.model_id(), "istupakov/parakeet-tdt-0.6b-v3-onnx");
+        assert_eq!(r.model_id(), "parakeet-tdt-0.6b-v3");
         assert_eq!(r.pinned_language, None); // >=2 langs: no pin
     }
 
