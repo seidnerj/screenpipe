@@ -183,6 +183,7 @@ async fn run_model(
         None,
         Vec::new(),
         Vec::new(),
+        screenpipe_audio::transcription::model_resolution::ComputePref::Auto,
     )
     .await
     .with_context(|| format!("construct TranscriptionEngine for {}", spec.name))?;

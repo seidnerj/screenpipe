@@ -189,6 +189,7 @@ pub async fn transcribe_handler(
             openai_compatible_config,
             languages,
             vec![],
+            audio_manager.compute().await,
         )
         .await
         {

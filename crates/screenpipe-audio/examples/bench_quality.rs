@@ -281,6 +281,7 @@ async fn main() -> anyhow::Result<()> {
         None,
         vec![Language::English],
         vec![],
+        screenpipe_audio::transcription::model_resolution::ComputePref::Auto,
     )
     .await?;
     println!("Model loaded in {:.1}s\n", t0.elapsed().as_secs_f64());

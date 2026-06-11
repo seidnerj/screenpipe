@@ -732,6 +732,7 @@ impl AudioManager {
         let openai_compatible_config = options.openai_compatible_config.clone();
         let audio_transcription_engine = options.transcription_engine.clone();
         let vocabulary = options.vocabulary.clone();
+        let compute = options.compute;
         let is_batch_mode = options.transcription_mode == TranscriptionMode::Batch;
         let batch_max_duration_secs = options.batch_max_duration_secs;
         let filter_music = options.filter_music;
@@ -751,6 +752,7 @@ impl AudioManager {
             openai_compatible_config.clone(),
             languages.clone(),
             vocabulary.clone(),
+            compute,
         )
         .await?;
 
@@ -1196,6 +1198,11 @@ impl AudioManager {
         self.options.read().await.transcription_engine.clone()
     }
 
+    /// Returns the compute preference for local transcription models.
+    pub async fn compute(&self) -> crate::transcription::model_resolution::ComputePref {
+        self.options.read().await.compute
+    }
+
     /// Returns the current deepgram API key.
     pub async fn deepgram_api_key(&self) -> Option<String> {
         self.options.read().await.deepgram_api_key.clone()
@@ -1231,6 +1238,7 @@ impl AudioManager {
         let openai_compatible_config = options.openai_compatible_config.clone();
         let languages = options.languages.clone();
         let vocabulary = options.vocabulary.clone();
+        let compute = options.compute;
         drop(options);
 
         let mut changed = false;
@@ -1262,6 +1270,7 @@ impl AudioManager {
                     openai_compatible_config.clone(),
                     languages.clone(),
                     vocabulary.clone(),
+                    compute,
                 )
                 .await
                 {
@@ -1302,6 +1311,7 @@ impl AudioManager {
                         openai_compatible_config.clone(),
                         languages.clone(),
                         vocabulary.clone(),
+                        compute,
                     )
                     .await
                     {

@@ -92,6 +92,7 @@ async fn main() -> anyhow::Result<()> {
         None,
         vec![Language::English],
         vec![],
+        screenpipe_audio::transcription::model_resolution::ComputePref::Auto,
     )
     .await?;
     let load_time = t_load.elapsed().as_secs_f64();

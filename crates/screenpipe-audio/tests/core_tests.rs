@@ -217,7 +217,7 @@ mod tests {
 
         let engine = Arc::new(AudioTranscriptionEngine::WhisperLargeV3TurboQuantized);
         let transcription_engine =
-            TranscriptionEngine::new(engine.clone(), None, None, vec![Language::Arabic], vec![])
+            TranscriptionEngine::new(engine.clone(), None, None, vec![Language::Arabic], vec![], screenpipe_audio::transcription::model_resolution::ComputePref::Auto)
                 .await
                 .expect("failed to create transcription engine");
 
@@ -346,7 +346,7 @@ mod tests {
 
         let engine = Arc::new(AudioTranscriptionEngine::WhisperLargeV3TurboQuantized);
         let transcription_engine =
-            TranscriptionEngine::new(engine.clone(), None, None, vec![Language::English], vec![])
+            TranscriptionEngine::new(engine.clone(), None, None, vec![Language::English], vec![], screenpipe_audio::transcription::model_resolution::ComputePref::Auto)
                 .await
                 .expect("failed to create transcription engine");
 
