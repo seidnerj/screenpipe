@@ -9,6 +9,7 @@ use crate::core::device::AudioDevice;
 pub mod deepgram;
 pub mod diarization;
 pub mod engine;
+pub mod model_resolution;
 pub mod openai_compatible;
 pub mod stt;
 pub mod whisper;
