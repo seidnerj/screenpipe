@@ -218,6 +218,9 @@ impl TranscriptionEngine {
                         .map_err(|e| anyhow!("parakeet model resolution failed: {:?}", e))?;
                     let backend = resolved.backend();
                     let model_id = resolved.model_id().to_string();
+                    // NOTE: resolved.pinned_language is intentionally unused here — Parakeet
+                    // has no decode-language control (the model_id already encodes coverage).
+                    // The decode pin is whisper-only (see the Whisper arm below).
                     info!(
                         "transcription engine runtime: Parakeet model={} backend={:?} langs={:?}",
                         model_id, backend, langs

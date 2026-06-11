@@ -164,7 +164,7 @@ pulseaudio = ["screenpipe-audio/pulseaudio"]
 apple-intelligence = ["dep:screenpipe-apple-intelligence"]
 qwen3-asr = ["screenpipe-audio/qwen3-asr"]
 parakeet = ["screenpipe-audio/parakeet"]
-parakeet-mlx = ["screenpipe-audio/parakeet-mlx"]
+parakeet-mlx = ["parakeet", "screenpipe-audio/parakeet-mlx"]
 # Image-PII detector via MLX (Apple Silicon-only). Compiled into macOS
 # release builds for experiments, but the CLI runtime keeps ONNX as the
 # default stable path unless SCREENPIPE_ENABLE_EXPERIMENTAL_RFDETR_MLX=1

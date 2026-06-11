@@ -145,7 +145,10 @@ vulkan = ["audiopipe?/vulkan-ggml"]
 pulseaudio = ["dep:libpulse-binding", "dep:libpulse-simple-binding"]
 qwen3-asr = ["dep:audiopipe"]
 parakeet = ["dep:audiopipe"]
-parakeet-mlx = ["dep:audiopipe", "audiopipe?/parakeet-mlx", "dep:mlx-rs"]
+# parakeet-mlx implies parakeet: the runtime Parakeet code path and the
+# `TranscriptionEngine::Parakeet` variant are gated on `parakeet`, and the MLX
+# loader is reached through that same arm — enabling MLX alone would fail to compile.
+parakeet-mlx = ["parakeet", "audiopipe?/parakeet-mlx", "dep:mlx-rs"]
 
 [[example]]
 name = "screenpipe-audio"

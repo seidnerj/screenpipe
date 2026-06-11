@@ -72,8 +72,10 @@ async fn silent_room_no_ghost_words() {
     }
 
     let engine_config = Arc::new(AudioTranscriptionEngine::WhisperTiny);
-    if resolve_whisper_filename(&engine_config, &[]).and_then(|f| get_cached_whisper_model_path(&f)).is_none() {
-        eprintln!("SKIP: ggml-tiny.bin not cached. Run screenpipe once to download it.");
+    // Resolve with the SAME language set the engine is built with below (English),
+    // so the cache-presence guard checks the exact ggml file new() will load.
+    if resolve_whisper_filename(&engine_config, &[Language::English]).and_then(|f| get_cached_whisper_model_path(&f)).is_none() {
+        eprintln!("SKIP: whisper tiny model not cached. Run screenpipe once to download it.");
         return;
     }
 
