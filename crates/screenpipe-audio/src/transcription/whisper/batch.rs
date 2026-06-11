@@ -16,6 +16,12 @@ use whisper_rs::{FullParams, SamplingStrategy, WhisperState};
 /// white noise at 0.1 amplitude (RMS~0.071), normal speech (RMS~0.05-0.3).
 const MIN_RMS_ENERGY: f32 = 0.015;
 
+/// Decide the whisper decode language: a resolver pin wins outright; otherwise use
+/// the detected language. Pure so it is unit-testable without a whisper model.
+fn decode_language<'a>(pinned: Option<&'a str>, detected: Option<&'a str>) -> Option<&'a str> {
+    pinned.or(detected)
+}
+
 /// Processes audio data using the Whisper model to generate transcriptions.
 ///
 /// # Returns
@@ -25,6 +31,7 @@ pub async fn process_with_whisper(
     languages: Vec<Language>,
     whisper_state: &mut WhisperState,
     vocabulary: &[VocabularyEntry],
+    pinned_language: Option<&str>,
 ) -> Result<String> {
     // Pre-check: if audio energy is too low, skip transcription entirely.
     // Whisper hallucinates on silence/near-silence (e.g. "Thank you.", "So, let's go.")
@@ -74,8 +81,14 @@ pub async fn process_with_whisper(
     params.set_no_context(true);
 
     whisper_state.pcm_to_mel(&audio, 2)?;
-    let (_, lang_tokens) = whisper_state.lang_detect(0, 2)?;
-    let lang = detect_language(lang_tokens, languages);
+    // A pinned (single-requested) language skips the lang_detect encoder pass entirely.
+    let detected = if pinned_language.is_none() {
+        let (_, lang_tokens) = whisper_state.lang_detect(0, 2)?;
+        detect_language(lang_tokens, languages)
+    } else {
+        None
+    };
+    let lang = decode_language(pinned_language, detected);
     params.set_language(lang);
     params.set_debug_mode(false);
     params.set_translate(false);
@@ -152,6 +165,24 @@ pub(crate) fn strip_repetition_loop(transcript: &str) -> String {
         }
     }
     transcript.to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::decode_language;
+
+    #[test]
+    fn pin_overrides_detection() {
+        assert_eq!(decode_language(Some("he"), Some("en")), Some("he"));
+    }
+    #[test]
+    fn no_pin_uses_detection() {
+        assert_eq!(decode_language(None, Some("en")), Some("en"));
+    }
+    #[test]
+    fn no_pin_no_detection_is_none() {
+        assert_eq!(decode_language(None, None), None);
+    }
 }
 
 #[cfg(test)]

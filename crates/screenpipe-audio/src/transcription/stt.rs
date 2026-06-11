@@ -194,7 +194,8 @@ pub async fn stt(
                         device, e
                     );
                     // Fallback to Whisper
-                    process_with_whisper(audio, languages.clone(), whisper_state, vocabulary).await
+                    // realtime path: no resolver pin here; detect_language already honors a single-language list
+                    process_with_whisper(audio, languages.clone(), whisper_state, vocabulary, None).await
                 }
             }
         }
@@ -241,13 +242,13 @@ pub async fn stt(
                         "device: {}, openai compatible transcription failed, falling back to Whisper: {:?}",
                         device, e
                     );
-                // Fallback to Whisper
-                process_with_whisper(audio, languages.clone(), whisper_state, vocabulary).await
+                // Fallback to Whisper; realtime path: no resolver pin here
+                process_with_whisper(audio, languages.clone(), whisper_state, vocabulary, None).await
             }
         }
     } else {
-        // Existing Whisper implementation
-        process_with_whisper(audio, languages, whisper_state, vocabulary).await
+        // Existing Whisper implementation; realtime path: no resolver pin here
+        process_with_whisper(audio, languages, whisper_state, vocabulary, None).await
     };
 
     // Post-processing: apply vocabulary replacements
