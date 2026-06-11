@@ -222,6 +222,7 @@ async fn main() -> anyhow::Result<()> {
             None,
             vec![Language::English],
             vec![],
+            screenpipe_audio::transcription::model_resolution::ComputePref::Auto,
         )
         .await;
 

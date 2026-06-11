@@ -328,6 +328,7 @@ pub async fn retranscribe_handler(
     let deepgram_config = audio_manager.deepgram_config().await;
     let openai_compatible_config = audio_manager.openai_compatible_config().await;
     let languages = audio_manager.languages().await;
+    let compute = audio_manager.compute().await;
 
     // Build effective vocabulary: user-provided + prompt words as bias entries
     let mut effective_vocabulary = vocabulary;
@@ -350,6 +351,7 @@ pub async fn retranscribe_handler(
         openai_compatible_config,
         languages,
         effective_vocabulary,
+        compute,
     )
     .await
     {
@@ -558,6 +560,7 @@ pub async fn retranscribe_meeting_handler(
         openai_compatible_config,
         languages,
         vocabulary,
+        state.audio_manager.compute().await,
     )
     .await
     {

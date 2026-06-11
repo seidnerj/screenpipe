@@ -1068,6 +1068,7 @@ mod tests {
             None,
             Vec::new(),
             Vec::new(),
+            crate::transcription::model_resolution::ComputePref::Auto,
         )
         .await
         .expect("deepgram engine");
@@ -1102,6 +1103,7 @@ mod tests {
             None,
             Vec::new(),
             Vec::new(),
+            crate::transcription::model_resolution::ComputePref::Auto,
         )
         .await
         .expect("deepgram engine");

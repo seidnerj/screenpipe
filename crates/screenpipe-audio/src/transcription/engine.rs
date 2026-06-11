@@ -118,7 +118,9 @@ impl TranscriptionEngine {
         openai_compatible_config: Option<crate::transcription::stt::OpenAICompatibleConfig>,
         languages: Vec<Language>,
         vocabulary: Vec<VocabularyEntry>,
+        compute: crate::transcription::model_resolution::ComputePref,
     ) -> Result<Self> {
+        info!("transcription engine runtime: compute preference = {:?}", compute);
         match *config {
             AudioTranscriptionEngine::Disabled => {
                 info!("transcription engine runtime: Disabled (no background STT)");

@@ -17,7 +17,10 @@ use crate::{
     meeting_detector::MeetingDetector,
     meeting_streaming::MeetingStreamingConfig,
     transcription::{
-        deepgram::DeepgramTranscriptionConfig, stt::OpenAICompatibleConfig, VocabularyEntry,
+        deepgram::DeepgramTranscriptionConfig,
+        model_resolution::ComputePref,
+        stt::OpenAICompatibleConfig,
+        VocabularyEntry,
     },
     vad::VadEngineEnum,
 };
@@ -137,6 +140,8 @@ pub struct AudioManagerOptions {
     pub channel_config: ChannelConfig,
     /// Disable all audio functionality (no device polling, no model downloads)
     pub is_disabled: bool,
+    /// Compute placement preference for local models (CPU vs GPU).
+    pub compute: ComputePref,
 }
 
 impl Default for AudioManagerOptions {
@@ -173,6 +178,7 @@ impl Default for AudioManagerOptions {
             batch_max_duration_secs: None,
             channel_config: ChannelConfig::default(),
             is_disabled: false,
+            compute: ComputePref::Auto,
         }
     }
 }
@@ -191,6 +197,11 @@ impl AudioManagerBuilder {
 
     pub fn transcription_engine(mut self, transcription_engine: AudioTranscriptionEngine) -> Self {
         self.options.transcription_engine = Arc::new(transcription_engine);
+        self
+    }
+
+    pub fn compute(mut self, compute: ComputePref) -> Self {
+        self.options.compute = compute;
         self
     }
 

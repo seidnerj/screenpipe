@@ -431,6 +431,7 @@ impl RecordingConfig {
             .vad_engine(VadEngineEnum::Silero)
             .languages(self.languages.clone())
             .transcription_engine(self.audio_transcription_engine.clone())
+            .compute(self.compute)
             .enabled_devices(audio_devices)
             .use_system_default_audio(self.use_system_default_audio)
             .experimental_coreaudio_system_audio(self.experimental_coreaudio_system_audio)
