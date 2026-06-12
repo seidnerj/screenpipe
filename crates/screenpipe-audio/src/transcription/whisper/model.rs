@@ -13,7 +13,10 @@ use whisper_rs::WhisperContextParameters;
 /// The ggml filename this whisper engine + requested languages resolves to
 /// (catalog-driven; honors `.en` vs multilingual). `None` if the engine is not a
 /// resolvable whisper size class. Backend-independent (same file for cpu/gpu).
-pub fn resolve_whisper_filename(engine: &AudioTranscriptionEngine, languages: &[Language]) -> Option<String> {
+pub fn resolve_whisper_filename(
+    engine: &AudioTranscriptionEngine,
+    languages: &[Language],
+) -> Option<String> {
     let sc = engine.size_class()?;
     let langs: Vec<&str> = languages.iter().map(|l| l.as_lang_code()).collect();
     resolve_model(&sc, ComputePref::Cpu, &langs, false)
@@ -57,13 +60,19 @@ pub fn get_cached_whisper_model_path(model_filename: &str) -> Option<PathBuf> {
     cache_repo.get(model_filename)
 }
 
-pub fn create_whisper_context_parameters<'a>(backend: Backend) -> Result<WhisperContextParameters<'a>> {
+pub fn create_whisper_context_parameters<'a>(
+    backend: Backend,
+) -> Result<WhisperContextParameters<'a>> {
     let mut context_param = WhisperContextParameters::default();
 
     // Honor the resolved compute backend — no hardcoded default; the caller's --compute
     // choice flows through here.
     context_param.use_gpu(backend == Backend::Gpu);
-    info!("whisper context: backend={:?} (gpu={})", backend, backend == Backend::Gpu);
+    info!(
+        "whisper context: backend={:?} (gpu={})",
+        backend,
+        backend == Backend::Gpu
+    );
 
     // NOTE: keep DTW disabled to avoid whisper.cpp median_filter asserts on short inputs
     // (WHISPER_ASSERT filter_width < a->ne[2]). Token-level timestamps are optional for us

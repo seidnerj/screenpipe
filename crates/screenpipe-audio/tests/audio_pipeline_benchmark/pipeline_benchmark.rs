@@ -244,10 +244,16 @@ async fn pipeline_with_whisper_dataset() {
     // Load Whisper model (large-v3-turbo quantized — the production default)
     let engine = Arc::new(AudioTranscriptionEngine::WhisperLargeV3TurboQuantized);
     println!("\n  Loading Whisper model (large-v3-turbo-q8_0)...");
-    let transcription_engine =
-        TranscriptionEngine::new(engine.clone(), None, None, vec![Language::English], vec![], screenpipe_audio::transcription::model_resolution::ComputePref::Auto)
-            .await
-            .expect("failed to create transcription engine");
+    let transcription_engine = TranscriptionEngine::new(
+        engine.clone(),
+        None,
+        None,
+        vec![Language::English],
+        vec![],
+        screenpipe_audio::transcription::model_resolution::ComputePref::Auto,
+    )
+    .await
+    .expect("failed to create transcription engine");
     let mut session = transcription_engine
         .create_session()
         .expect("failed to create session");

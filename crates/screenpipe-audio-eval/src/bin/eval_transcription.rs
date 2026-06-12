@@ -154,7 +154,8 @@ async fn prime_model(engine: &AudioTranscriptionEngine) -> Result<()> {
         }
         _ => {
             let arc = Arc::new(engine.clone());
-            let f = resolve_whisper_filename(&arc, &[]).ok_or_else(|| anyhow::anyhow!("no size class for engine {:?}", engine))?;
+            let f = resolve_whisper_filename(&arc, &[])
+                .ok_or_else(|| anyhow::anyhow!("no size class for engine {:?}", engine))?;
             if get_cached_whisper_model_path(&f).is_some() {
                 return Ok(());
             }

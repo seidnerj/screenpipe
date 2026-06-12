@@ -17,10 +17,8 @@ use crate::{
     meeting_detector::MeetingDetector,
     meeting_streaming::MeetingStreamingConfig,
     transcription::{
-        deepgram::DeepgramTranscriptionConfig,
-        model_resolution::ComputePref,
-        stt::OpenAICompatibleConfig,
-        VocabularyEntry,
+        deepgram::DeepgramTranscriptionConfig, model_resolution::ComputePref,
+        stt::OpenAICompatibleConfig, VocabularyEntry,
     },
     vad::VadEngineEnum,
 };

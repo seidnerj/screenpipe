@@ -1116,13 +1116,12 @@ impl RecordArgs {
             settings.audio_transcription_engine = safe.to_string();
         }
 
-        let mut config =
-            crate::recording_config::RecordingConfig::from_settings(
-                &settings,
-                data_dir,
-                None,
-                self.compute.clone().into(),
-            );
+        let mut config = crate::recording_config::RecordingConfig::from_settings(
+            &settings,
+            data_dir,
+            None,
+            self.compute.clone().into(),
+        );
         // Mirror the CLI flag, but never let the user turn auth OFF when
         // the API is bound to the LAN — that would publish an unauthenticated
         // service. `from_settings` already enforces this; we reapply it

@@ -22,7 +22,10 @@ use crate::{
         stream::AudioStream,
     },
     metrics::AudioPipelineMetrics,
-    transcription::{engine::TranscriptionEngine, whisper::model::{get_cached_whisper_model_path, resolve_whisper_filename}},
+    transcription::{
+        engine::TranscriptionEngine,
+        whisper::model::{get_cached_whisper_model_path, resolve_whisper_filename},
+    },
     AudioInput,
 };
 use screenpipe_core::Language;
@@ -74,7 +77,10 @@ async fn silent_room_no_ghost_words() {
     let engine_config = Arc::new(AudioTranscriptionEngine::WhisperTiny);
     // Resolve with the SAME language set the engine is built with below (English),
     // so the cache-presence guard checks the exact ggml file new() will load.
-    if resolve_whisper_filename(&engine_config, &[Language::English]).and_then(|f| get_cached_whisper_model_path(&f)).is_none() {
+    if resolve_whisper_filename(&engine_config, &[Language::English])
+        .and_then(|f| get_cached_whisper_model_path(&f))
+        .is_none()
+    {
         eprintln!("SKIP: whisper tiny model not cached. Run screenpipe once to download it.");
         return;
     }
@@ -131,10 +137,16 @@ async fn silent_room_no_ghost_words() {
 
     let _ = tokio::time::timeout(Duration::from_secs(15), pipeline_handle).await;
 
-    let transcription_engine =
-        TranscriptionEngine::new(engine_config, None, None, vec![Language::English], vec![], crate::transcription::model_resolution::ComputePref::Auto)
-            .await
-            .expect("failed to load Whisper tiny");
+    let transcription_engine = TranscriptionEngine::new(
+        engine_config,
+        None,
+        None,
+        vec![Language::English],
+        vec![],
+        crate::transcription::model_resolution::ComputePref::Auto,
+    )
+    .await
+    .expect("failed to load Whisper tiny");
 
     let mut session = transcription_engine
         .create_session()

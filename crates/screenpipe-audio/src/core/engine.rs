@@ -90,9 +90,7 @@ impl AudioTranscriptionEngine {
             AudioTranscriptionEngine::WhisperBase => Some(sc(Family::Whisper, "base", None)),
             AudioTranscriptionEngine::WhisperSmall => Some(sc(Family::Whisper, "small", None)),
             AudioTranscriptionEngine::WhisperMedium => Some(sc(Family::Whisper, "medium", None)),
-            AudioTranscriptionEngine::WhisperLargeV3 => {
-                Some(sc(Family::Whisper, "large-v3", None))
-            }
+            AudioTranscriptionEngine::WhisperLargeV3 => Some(sc(Family::Whisper, "large-v3", None)),
             AudioTranscriptionEngine::WhisperLargeV3Quantized => {
                 Some(sc(Family::Whisper, "large-v3", Some("q5_0")))
             }
@@ -102,9 +100,7 @@ impl AudioTranscriptionEngine {
             AudioTranscriptionEngine::WhisperLargeV3TurboQuantized => {
                 Some(sc(Family::Whisper, "large-v3-turbo", Some("q8_0")))
             }
-            AudioTranscriptionEngine::Parakeet => {
-                Some(sc(Family::Parakeet, "0.6b", None))
-            }
+            AudioTranscriptionEngine::Parakeet => Some(sc(Family::Parakeet, "0.6b", None)),
             AudioTranscriptionEngine::Deepgram
             | AudioTranscriptionEngine::OpenAICompatible
             | AudioTranscriptionEngine::Qwen3Asr
@@ -279,7 +275,10 @@ mod tests {
     #[test]
     fn size_class_cloud_engines_are_none() {
         assert_eq!(AudioTranscriptionEngine::Deepgram.size_class(), None);
-        assert_eq!(AudioTranscriptionEngine::OpenAICompatible.size_class(), None);
+        assert_eq!(
+            AudioTranscriptionEngine::OpenAICompatible.size_class(),
+            None
+        );
         assert_eq!(AudioTranscriptionEngine::Qwen3Asr.size_class(), None);
         assert_eq!(AudioTranscriptionEngine::Disabled.size_class(), None);
     }

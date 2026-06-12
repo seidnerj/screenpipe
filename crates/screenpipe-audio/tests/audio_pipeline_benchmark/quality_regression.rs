@@ -29,10 +29,16 @@ async fn whisper_hallucination_on_silence() {
     println!("\n--- Whisper Hallucination: Pure Silence ---");
 
     let engine = Arc::new(AudioTranscriptionEngine::WhisperLargeV3TurboQuantized);
-    let transcription_engine =
-        TranscriptionEngine::new(engine.clone(), None, None, vec![Language::English], vec![], screenpipe_audio::transcription::model_resolution::ComputePref::Auto)
-            .await
-            .expect("failed to create transcription engine");
+    let transcription_engine = TranscriptionEngine::new(
+        engine.clone(),
+        None,
+        None,
+        vec![Language::English],
+        vec![],
+        screenpipe_audio::transcription::model_resolution::ComputePref::Auto,
+    )
+    .await
+    .expect("failed to create transcription engine");
     let mut session = transcription_engine
         .create_session()
         .expect("failed to create session");
@@ -67,10 +73,16 @@ async fn whisper_hallucination_on_noise() {
     println!("\n--- Whisper Hallucination: White Noise ---");
 
     let engine = Arc::new(AudioTranscriptionEngine::WhisperLargeV3TurboQuantized);
-    let transcription_engine =
-        TranscriptionEngine::new(engine.clone(), None, None, vec![Language::English], vec![], screenpipe_audio::transcription::model_resolution::ComputePref::Auto)
-            .await
-            .expect("failed to create transcription engine");
+    let transcription_engine = TranscriptionEngine::new(
+        engine.clone(),
+        None,
+        None,
+        vec![Language::English],
+        vec![],
+        screenpipe_audio::transcription::model_resolution::ComputePref::Auto,
+    )
+    .await
+    .expect("failed to create transcription engine");
     let mut session = transcription_engine
         .create_session()
         .expect("failed to create session");
@@ -103,10 +115,16 @@ async fn whisper_hallucination_on_ambient() {
     println!("\n--- Whisper Hallucination: Low Ambient Noise ---");
 
     let engine = Arc::new(AudioTranscriptionEngine::WhisperLargeV3TurboQuantized);
-    let transcription_engine =
-        TranscriptionEngine::new(engine.clone(), None, None, vec![Language::English], vec![], screenpipe_audio::transcription::model_resolution::ComputePref::Auto)
-            .await
-            .expect("failed to create transcription engine");
+    let transcription_engine = TranscriptionEngine::new(
+        engine.clone(),
+        None,
+        None,
+        vec![Language::English],
+        vec![],
+        screenpipe_audio::transcription::model_resolution::ComputePref::Auto,
+    )
+    .await
+    .expect("failed to create transcription engine");
     let mut session = transcription_engine
         .create_session()
         .expect("failed to create session");
@@ -147,10 +165,16 @@ async fn whisper_real_speech_still_works() {
     };
 
     let engine = Arc::new(AudioTranscriptionEngine::WhisperLargeV3TurboQuantized);
-    let transcription_engine =
-        TranscriptionEngine::new(engine.clone(), None, None, vec![Language::English], vec![], screenpipe_audio::transcription::model_resolution::ComputePref::Auto)
-            .await
-            .expect("failed to create transcription engine");
+    let transcription_engine = TranscriptionEngine::new(
+        engine.clone(),
+        None,
+        None,
+        vec![Language::English],
+        vec![],
+        screenpipe_audio::transcription::model_resolution::ComputePref::Auto,
+    )
+    .await
+    .expect("failed to create transcription engine");
     let mut session = transcription_engine
         .create_session()
         .expect("failed to create session");

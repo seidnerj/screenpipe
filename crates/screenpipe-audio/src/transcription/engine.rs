@@ -119,7 +119,10 @@ impl TranscriptionEngine {
         vocabulary: Vec<VocabularyEntry>,
         compute: crate::transcription::model_resolution::ComputePref,
     ) -> Result<Self> {
-        info!("transcription engine runtime: compute preference = {:?}", compute);
+        info!(
+            "transcription engine runtime: compute preference = {:?}",
+            compute
+        );
         match *config {
             AudioTranscriptionEngine::Disabled => {
                 info!("transcription engine runtime: Disabled (no background STT)");
@@ -676,7 +679,16 @@ impl TranscriptionSession {
                 vocabulary,
                 pinned_language,
                 ..
-            } => process_with_whisper(audio, languages.clone(), state, vocabulary, pinned_language.as_deref()).await,
+            } => {
+                process_with_whisper(
+                    audio,
+                    languages.clone(),
+                    state,
+                    vocabulary,
+                    pinned_language.as_deref(),
+                )
+                .await
+            }
 
             Self::OpenAICompatible {
                 endpoint,

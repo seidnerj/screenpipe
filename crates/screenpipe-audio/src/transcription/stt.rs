@@ -195,7 +195,8 @@ pub async fn stt(
                     );
                     // Fallback to Whisper
                     // realtime path: no resolver pin here; detect_language already honors a single-language list
-                    process_with_whisper(audio, languages.clone(), whisper_state, vocabulary, None).await
+                    process_with_whisper(audio, languages.clone(), whisper_state, vocabulary, None)
+                        .await
                 }
             }
         }
@@ -243,7 +244,8 @@ pub async fn stt(
                         device, e
                     );
                 // Fallback to Whisper; realtime path: no resolver pin here
-                process_with_whisper(audio, languages.clone(), whisper_state, vocabulary, None).await
+                process_with_whisper(audio, languages.clone(), whisper_state, vocabulary, None)
+                    .await
             }
         }
     } else {

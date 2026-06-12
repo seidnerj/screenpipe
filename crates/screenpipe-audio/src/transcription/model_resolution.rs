@@ -62,7 +62,7 @@ pub enum Family {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SizeClass {
     pub family: Family,
-    pub size: String,          // "0.6b" | "tiny" | "small" | "large-v3" | "large-v3-turbo" ...
+    pub size: String, // "0.6b" | "tiny" | "small" | "large-v3" | "large-v3-turbo" ...
     pub quant: Option<String>, // None | "q8_0" | "q5_0" | "q5_1" ...
 }
 
@@ -112,8 +112,13 @@ impl Resolved {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ResolveError {
     GpuUnavailable,
-    LanguageNotCovered { family: Family, requested: Vec<String> },
-    ModelVariantUnavailable { detail: String },
+    LanguageNotCovered {
+        family: Family,
+        requested: Vec<String>,
+    },
+    ModelVariantUnavailable {
+        detail: String,
+    },
 }
 
 /// One concrete model in the catalog.
@@ -134,56 +139,280 @@ struct CatalogEntry {
 /// Parakeet TDT 0.6b v3 multilingual coverage (25 European languages). Source: the
 /// parakeet-tdt-0.6b-v3 model card.
 const PARAKEET_V3: &[&str] = &[
-    "bg", "hr", "cs", "da", "nl", "en", "et", "fi", "fr", "de", "el", "hu", "it",
-    "lv", "lt", "mt", "pl", "pt", "ro", "sk", "sl", "es", "sv", "ru", "uk",
+    "bg", "hr", "cs", "da", "nl", "en", "et", "fi", "fr", "de", "el", "hu", "it", "lv", "lt", "mt",
+    "pl", "pt", "ro", "sk", "sl", "es", "sv", "ru", "uk",
 ];
 
 // NOTE: whisper backend uses the SAME ggml file for cpu/gpu (Metal is a runtime
 // flag), so each whisper row is duplicated for both backends with identical model_id.
 const CATALOG: &[CatalogEntry] = &[
     // ---- Parakeet (audiopipe) ----
-    CatalogEntry { family: Family::Parakeet, size: "0.6b", quant: None, backend: Backend::Cpu, coverage: LangSet::Codes(&["en"]), model_id: "parakeet-tdt-0.6b-v2" },
-    CatalogEntry { family: Family::Parakeet, size: "0.6b", quant: None, backend: Backend::Gpu, coverage: LangSet::Codes(&["en"]), model_id: "parakeet-tdt-0.6b-v2-mlx" },
-    CatalogEntry { family: Family::Parakeet, size: "0.6b", quant: None, backend: Backend::Cpu, coverage: LangSet::Codes(PARAKEET_V3), model_id: "parakeet-tdt-0.6b-v3" },
-    CatalogEntry { family: Family::Parakeet, size: "0.6b", quant: None, backend: Backend::Gpu, coverage: LangSet::Codes(PARAKEET_V3), model_id: "parakeet-tdt-0.6b-v3-mlx" },
+    CatalogEntry {
+        family: Family::Parakeet,
+        size: "0.6b",
+        quant: None,
+        backend: Backend::Cpu,
+        coverage: LangSet::Codes(&["en"]),
+        model_id: "parakeet-tdt-0.6b-v2",
+    },
+    CatalogEntry {
+        family: Family::Parakeet,
+        size: "0.6b",
+        quant: None,
+        backend: Backend::Gpu,
+        coverage: LangSet::Codes(&["en"]),
+        model_id: "parakeet-tdt-0.6b-v2-mlx",
+    },
+    CatalogEntry {
+        family: Family::Parakeet,
+        size: "0.6b",
+        quant: None,
+        backend: Backend::Cpu,
+        coverage: LangSet::Codes(PARAKEET_V3),
+        model_id: "parakeet-tdt-0.6b-v3",
+    },
+    CatalogEntry {
+        family: Family::Parakeet,
+        size: "0.6b",
+        quant: None,
+        backend: Backend::Gpu,
+        coverage: LangSet::Codes(PARAKEET_V3),
+        model_id: "parakeet-tdt-0.6b-v3-mlx",
+    },
     // ---- Whisper (ggerganov/whisper.cpp ggml files); multilingual + .en per size ----
     // tiny (unquantized)
-    CatalogEntry { family: Family::Whisper, size: "tiny", quant: None, backend: Backend::Cpu, coverage: LangSet::All, model_id: "ggml-tiny.bin" },
-    CatalogEntry { family: Family::Whisper, size: "tiny", quant: None, backend: Backend::Gpu, coverage: LangSet::All, model_id: "ggml-tiny.bin" },
-    CatalogEntry { family: Family::Whisper, size: "tiny", quant: None, backend: Backend::Cpu, coverage: LangSet::Codes(&["en"]), model_id: "ggml-tiny.en.bin" },
-    CatalogEntry { family: Family::Whisper, size: "tiny", quant: None, backend: Backend::Gpu, coverage: LangSet::Codes(&["en"]), model_id: "ggml-tiny.en.bin" },
+    CatalogEntry {
+        family: Family::Whisper,
+        size: "tiny",
+        quant: None,
+        backend: Backend::Cpu,
+        coverage: LangSet::All,
+        model_id: "ggml-tiny.bin",
+    },
+    CatalogEntry {
+        family: Family::Whisper,
+        size: "tiny",
+        quant: None,
+        backend: Backend::Gpu,
+        coverage: LangSet::All,
+        model_id: "ggml-tiny.bin",
+    },
+    CatalogEntry {
+        family: Family::Whisper,
+        size: "tiny",
+        quant: None,
+        backend: Backend::Cpu,
+        coverage: LangSet::Codes(&["en"]),
+        model_id: "ggml-tiny.en.bin",
+    },
+    CatalogEntry {
+        family: Family::Whisper,
+        size: "tiny",
+        quant: None,
+        backend: Backend::Gpu,
+        coverage: LangSet::Codes(&["en"]),
+        model_id: "ggml-tiny.en.bin",
+    },
     // tiny quantized q8_0 (multilingual + .en)
-    CatalogEntry { family: Family::Whisper, size: "tiny", quant: Some("q8_0"), backend: Backend::Cpu, coverage: LangSet::All, model_id: "ggml-tiny-q8_0.bin" },
-    CatalogEntry { family: Family::Whisper, size: "tiny", quant: Some("q8_0"), backend: Backend::Gpu, coverage: LangSet::All, model_id: "ggml-tiny-q8_0.bin" },
-    CatalogEntry { family: Family::Whisper, size: "tiny", quant: Some("q8_0"), backend: Backend::Cpu, coverage: LangSet::Codes(&["en"]), model_id: "ggml-tiny.en-q8_0.bin" },
-    CatalogEntry { family: Family::Whisper, size: "tiny", quant: Some("q8_0"), backend: Backend::Gpu, coverage: LangSet::Codes(&["en"]), model_id: "ggml-tiny.en-q8_0.bin" },
+    CatalogEntry {
+        family: Family::Whisper,
+        size: "tiny",
+        quant: Some("q8_0"),
+        backend: Backend::Cpu,
+        coverage: LangSet::All,
+        model_id: "ggml-tiny-q8_0.bin",
+    },
+    CatalogEntry {
+        family: Family::Whisper,
+        size: "tiny",
+        quant: Some("q8_0"),
+        backend: Backend::Gpu,
+        coverage: LangSet::All,
+        model_id: "ggml-tiny-q8_0.bin",
+    },
+    CatalogEntry {
+        family: Family::Whisper,
+        size: "tiny",
+        quant: Some("q8_0"),
+        backend: Backend::Cpu,
+        coverage: LangSet::Codes(&["en"]),
+        model_id: "ggml-tiny.en-q8_0.bin",
+    },
+    CatalogEntry {
+        family: Family::Whisper,
+        size: "tiny",
+        quant: Some("q8_0"),
+        backend: Backend::Gpu,
+        coverage: LangSet::Codes(&["en"]),
+        model_id: "ggml-tiny.en-q8_0.bin",
+    },
     // base (multilingual + .en)
-    CatalogEntry { family: Family::Whisper, size: "base", quant: None, backend: Backend::Cpu, coverage: LangSet::All, model_id: "ggml-base.bin" },
-    CatalogEntry { family: Family::Whisper, size: "base", quant: None, backend: Backend::Gpu, coverage: LangSet::All, model_id: "ggml-base.bin" },
-    CatalogEntry { family: Family::Whisper, size: "base", quant: None, backend: Backend::Cpu, coverage: LangSet::Codes(&["en"]), model_id: "ggml-base.en.bin" },
-    CatalogEntry { family: Family::Whisper, size: "base", quant: None, backend: Backend::Gpu, coverage: LangSet::Codes(&["en"]), model_id: "ggml-base.en.bin" },
+    CatalogEntry {
+        family: Family::Whisper,
+        size: "base",
+        quant: None,
+        backend: Backend::Cpu,
+        coverage: LangSet::All,
+        model_id: "ggml-base.bin",
+    },
+    CatalogEntry {
+        family: Family::Whisper,
+        size: "base",
+        quant: None,
+        backend: Backend::Gpu,
+        coverage: LangSet::All,
+        model_id: "ggml-base.bin",
+    },
+    CatalogEntry {
+        family: Family::Whisper,
+        size: "base",
+        quant: None,
+        backend: Backend::Cpu,
+        coverage: LangSet::Codes(&["en"]),
+        model_id: "ggml-base.en.bin",
+    },
+    CatalogEntry {
+        family: Family::Whisper,
+        size: "base",
+        quant: None,
+        backend: Backend::Gpu,
+        coverage: LangSet::Codes(&["en"]),
+        model_id: "ggml-base.en.bin",
+    },
     // small
-    CatalogEntry { family: Family::Whisper, size: "small", quant: None, backend: Backend::Cpu, coverage: LangSet::All, model_id: "ggml-small.bin" },
-    CatalogEntry { family: Family::Whisper, size: "small", quant: None, backend: Backend::Gpu, coverage: LangSet::All, model_id: "ggml-small.bin" },
-    CatalogEntry { family: Family::Whisper, size: "small", quant: None, backend: Backend::Cpu, coverage: LangSet::Codes(&["en"]), model_id: "ggml-small.en.bin" },
-    CatalogEntry { family: Family::Whisper, size: "small", quant: None, backend: Backend::Gpu, coverage: LangSet::Codes(&["en"]), model_id: "ggml-small.en.bin" },
+    CatalogEntry {
+        family: Family::Whisper,
+        size: "small",
+        quant: None,
+        backend: Backend::Cpu,
+        coverage: LangSet::All,
+        model_id: "ggml-small.bin",
+    },
+    CatalogEntry {
+        family: Family::Whisper,
+        size: "small",
+        quant: None,
+        backend: Backend::Gpu,
+        coverage: LangSet::All,
+        model_id: "ggml-small.bin",
+    },
+    CatalogEntry {
+        family: Family::Whisper,
+        size: "small",
+        quant: None,
+        backend: Backend::Cpu,
+        coverage: LangSet::Codes(&["en"]),
+        model_id: "ggml-small.en.bin",
+    },
+    CatalogEntry {
+        family: Family::Whisper,
+        size: "small",
+        quant: None,
+        backend: Backend::Gpu,
+        coverage: LangSet::Codes(&["en"]),
+        model_id: "ggml-small.en.bin",
+    },
     // medium (multilingual + .en)
-    CatalogEntry { family: Family::Whisper, size: "medium", quant: None, backend: Backend::Cpu, coverage: LangSet::All, model_id: "ggml-medium.bin" },
-    CatalogEntry { family: Family::Whisper, size: "medium", quant: None, backend: Backend::Gpu, coverage: LangSet::All, model_id: "ggml-medium.bin" },
-    CatalogEntry { family: Family::Whisper, size: "medium", quant: None, backend: Backend::Cpu, coverage: LangSet::Codes(&["en"]), model_id: "ggml-medium.en.bin" },
-    CatalogEntry { family: Family::Whisper, size: "medium", quant: None, backend: Backend::Gpu, coverage: LangSet::Codes(&["en"]), model_id: "ggml-medium.en.bin" },
+    CatalogEntry {
+        family: Family::Whisper,
+        size: "medium",
+        quant: None,
+        backend: Backend::Cpu,
+        coverage: LangSet::All,
+        model_id: "ggml-medium.bin",
+    },
+    CatalogEntry {
+        family: Family::Whisper,
+        size: "medium",
+        quant: None,
+        backend: Backend::Gpu,
+        coverage: LangSet::All,
+        model_id: "ggml-medium.bin",
+    },
+    CatalogEntry {
+        family: Family::Whisper,
+        size: "medium",
+        quant: None,
+        backend: Backend::Cpu,
+        coverage: LangSet::Codes(&["en"]),
+        model_id: "ggml-medium.en.bin",
+    },
+    CatalogEntry {
+        family: Family::Whisper,
+        size: "medium",
+        quant: None,
+        backend: Backend::Gpu,
+        coverage: LangSet::Codes(&["en"]),
+        model_id: "ggml-medium.en.bin",
+    },
     // large-v3 (multilingual only — no .en for large)
-    CatalogEntry { family: Family::Whisper, size: "large-v3", quant: None, backend: Backend::Cpu, coverage: LangSet::All, model_id: "ggml-large-v3.bin" },
-    CatalogEntry { family: Family::Whisper, size: "large-v3", quant: None, backend: Backend::Gpu, coverage: LangSet::All, model_id: "ggml-large-v3.bin" },
+    CatalogEntry {
+        family: Family::Whisper,
+        size: "large-v3",
+        quant: None,
+        backend: Backend::Cpu,
+        coverage: LangSet::All,
+        model_id: "ggml-large-v3.bin",
+    },
+    CatalogEntry {
+        family: Family::Whisper,
+        size: "large-v3",
+        quant: None,
+        backend: Backend::Gpu,
+        coverage: LangSet::All,
+        model_id: "ggml-large-v3.bin",
+    },
     // large-v3 quantized q5_0 (multilingual only)
-    CatalogEntry { family: Family::Whisper, size: "large-v3", quant: Some("q5_0"), backend: Backend::Cpu, coverage: LangSet::All, model_id: "ggml-large-v3-q5_0.bin" },
-    CatalogEntry { family: Family::Whisper, size: "large-v3", quant: Some("q5_0"), backend: Backend::Gpu, coverage: LangSet::All, model_id: "ggml-large-v3-q5_0.bin" },
+    CatalogEntry {
+        family: Family::Whisper,
+        size: "large-v3",
+        quant: Some("q5_0"),
+        backend: Backend::Cpu,
+        coverage: LangSet::All,
+        model_id: "ggml-large-v3-q5_0.bin",
+    },
+    CatalogEntry {
+        family: Family::Whisper,
+        size: "large-v3",
+        quant: Some("q5_0"),
+        backend: Backend::Gpu,
+        coverage: LangSet::All,
+        model_id: "ggml-large-v3-q5_0.bin",
+    },
     // large-v3-turbo (multilingual only — no .en)
-    CatalogEntry { family: Family::Whisper, size: "large-v3-turbo", quant: None, backend: Backend::Cpu, coverage: LangSet::All, model_id: "ggml-large-v3-turbo.bin" },
-    CatalogEntry { family: Family::Whisper, size: "large-v3-turbo", quant: None, backend: Backend::Gpu, coverage: LangSet::All, model_id: "ggml-large-v3-turbo.bin" },
+    CatalogEntry {
+        family: Family::Whisper,
+        size: "large-v3-turbo",
+        quant: None,
+        backend: Backend::Cpu,
+        coverage: LangSet::All,
+        model_id: "ggml-large-v3-turbo.bin",
+    },
+    CatalogEntry {
+        family: Family::Whisper,
+        size: "large-v3-turbo",
+        quant: None,
+        backend: Backend::Gpu,
+        coverage: LangSet::All,
+        model_id: "ggml-large-v3-turbo.bin",
+    },
     // large-v3-turbo quantized q8_0 (multilingual only)
-    CatalogEntry { family: Family::Whisper, size: "large-v3-turbo", quant: Some("q8_0"), backend: Backend::Cpu, coverage: LangSet::All, model_id: "ggml-large-v3-turbo-q8_0.bin" },
-    CatalogEntry { family: Family::Whisper, size: "large-v3-turbo", quant: Some("q8_0"), backend: Backend::Gpu, coverage: LangSet::All, model_id: "ggml-large-v3-turbo-q8_0.bin" },
+    CatalogEntry {
+        family: Family::Whisper,
+        size: "large-v3-turbo",
+        quant: Some("q8_0"),
+        backend: Backend::Cpu,
+        coverage: LangSet::All,
+        model_id: "ggml-large-v3-turbo-q8_0.bin",
+    },
+    CatalogEntry {
+        family: Family::Whisper,
+        size: "large-v3-turbo",
+        quant: Some("q8_0"),
+        backend: Backend::Gpu,
+        coverage: LangSet::All,
+        model_id: "ggml-large-v3-turbo-q8_0.bin",
+    },
 ];
 
 /// Resolve concrete model + backend + decode pin. `gpu_available` is injected so this
@@ -232,7 +461,10 @@ pub fn resolve_model(
             })
         } else {
             Err(ResolveError::ModelVariantUnavailable {
-                detail: format!("{:?} {} (quant {:?}) on {:?}", sel.family, sel.size, sel.quant, backend),
+                detail: format!(
+                    "{:?} {} (quant {:?}) on {:?}",
+                    sel.family, sel.size, sel.quant, backend
+                ),
             })
         };
     }
@@ -299,7 +531,9 @@ mod tests {
     #[test]
     fn langset_breadth_orders_narrowest_first() {
         // All is the widest; a 2-code set is narrower than a 3-code set.
-        assert!(LangSet::Codes(&["en", "he"]).breadth() < LangSet::Codes(&["en", "fr", "de"]).breadth());
+        assert!(
+            LangSet::Codes(&["en", "he"]).breadth() < LangSet::Codes(&["en", "fr", "de"]).breadth()
+        );
         assert!(LangSet::Codes(&["en", "fr", "de"]).breadth() < LangSet::All.breadth());
     }
 }
@@ -308,10 +542,26 @@ mod tests {
 mod resolve_tests {
     use super::*;
 
-    fn parakeet(size: &str) -> SizeClass { SizeClass { family: Family::Parakeet, size: size.into(), quant: None } }
-    fn whisper(size: &str) -> SizeClass { SizeClass { family: Family::Whisper, size: size.into(), quant: None } }
+    fn parakeet(size: &str) -> SizeClass {
+        SizeClass {
+            family: Family::Parakeet,
+            size: size.into(),
+            quant: None,
+        }
+    }
+    fn whisper(size: &str) -> SizeClass {
+        SizeClass {
+            family: Family::Whisper,
+            size: size.into(),
+            quant: None,
+        }
+    }
     fn whisper_q(size: &str, quant: &str) -> SizeClass {
-        SizeClass { family: Family::Whisper, size: size.into(), quant: Some(quant.into()) }
+        SizeClass {
+            family: Family::Whisper,
+            size: size.into(),
+            quant: Some(quant.into()),
+        }
     }
 
     #[test]
@@ -389,7 +639,8 @@ mod resolve_tests {
 
     #[test]
     fn multi_lang_parakeet_en_he_bails() {
-        let e = resolve_model(&parakeet("0.6b"), ComputePref::Cpu, &["en", "he"], true).unwrap_err();
+        let e =
+            resolve_model(&parakeet("0.6b"), ComputePref::Cpu, &["en", "he"], true).unwrap_err();
         assert!(matches!(e, ResolveError::LanguageNotCovered { .. }));
     }
 
@@ -407,13 +658,20 @@ mod resolve_tests {
 
     #[test]
     fn whisper_tiny_quantized_en_picks_en_quant_file() {
-        let r = resolve_model(&whisper_q("tiny", "q8_0"), ComputePref::Cpu, &["en"], false).unwrap();
+        let r =
+            resolve_model(&whisper_q("tiny", "q8_0"), ComputePref::Cpu, &["en"], false).unwrap();
         assert_eq!(r.model_id(), "ggml-tiny.en-q8_0.bin");
     }
 
     #[test]
     fn whisper_large_v3_quantized_resolves() {
-        let r = resolve_model(&whisper_q("large-v3", "q5_0"), ComputePref::Cpu, &["he"], false).unwrap();
+        let r = resolve_model(
+            &whisper_q("large-v3", "q5_0"),
+            ComputePref::Cpu,
+            &["he"],
+            false,
+        )
+        .unwrap();
         assert_eq!(r.model_id(), "ggml-large-v3-q5_0.bin");
         assert_eq!(r.pinned_language.as_deref(), Some("he"));
     }

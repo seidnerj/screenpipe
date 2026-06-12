@@ -54,10 +54,16 @@ async fn test_transcription_accuracy() {
     ];
 
     let engine = Arc::new(AudioTranscriptionEngine::WhisperTinyQuantized);
-    let transcription_engine =
-        TranscriptionEngine::new(engine.clone(), None, None, vec![Language::English], vec![], screenpipe_audio::transcription::model_resolution::ComputePref::Auto)
-            .await
-            .expect("failed to create transcription engine");
+    let transcription_engine = TranscriptionEngine::new(
+        engine.clone(),
+        None,
+        None,
+        vec![Language::English],
+        vec![],
+        screenpipe_audio::transcription::model_resolution::ComputePref::Auto,
+    )
+    .await
+    .expect("failed to create transcription engine");
 
     let vad_engine: Arc<Mutex<Box<dyn VadEngine + Send>>> =
         Arc::new(Mutex::new(Box::new(SileroVad::new().await.unwrap())));

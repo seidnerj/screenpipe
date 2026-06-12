@@ -1256,7 +1256,9 @@ impl AudioManager {
                     | AudioTranscriptionEngine::WhisperLargeV3TurboQuantized
                     | AudioTranscriptionEngine::WhisperLargeV3
                     | AudioTranscriptionEngine::WhisperLargeV3Quantized
-            ) && resolve_whisper_filename(audio_transcription_engine.as_ref(), &languages).map(|f| get_cached_whisper_model_path(&f).is_some()).unwrap_or(false);
+            ) && resolve_whisper_filename(audio_transcription_engine.as_ref(), &languages)
+                .map(|f| get_cached_whisper_model_path(&f).is_some())
+                .unwrap_or(false);
 
         if should_try_transcription_refresh {
             let mut engine = self.engine.write().await;

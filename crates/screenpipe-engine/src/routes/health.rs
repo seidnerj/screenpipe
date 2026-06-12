@@ -332,7 +332,11 @@ const HEALTH_RESPONSE_BUDGET: std::time::Duration = std::time::Duration::from_se
 ///
 /// Returns `"stale"` (a degraded fault) only for output-playing-but-silent;
 /// everything else is `"idle"` (healthy).
-fn classify_silent_audio(output_running: bool, screen_locked: bool, recently_woke: bool) -> &'static str {
+fn classify_silent_audio(
+    output_running: bool,
+    screen_locked: bool,
+    recently_woke: bool,
+) -> &'static str {
     if output_running && !screen_locked && !recently_woke {
         "stale"
     } else {
@@ -1105,20 +1109,18 @@ async fn health_check_inner(state: &Arc<AppState>) -> HealthCheckResponse {
                 // available via segments_deferred / segments_batch_processed.
                 // Falls back to the activity-derived guess only if the options
                 // lock is momentarily contended (keeps health non-blocking).
-                transcription_mode: Some(
-                    match state.audio_manager.transcription_mode_hint() {
-                        Some(mode) => mode.as_str().to_string(),
-                        None => {
-                            if audio_snap.segments_deferred > 0
-                                || audio_snap.segments_batch_processed > 0
-                            {
-                                "batch".to_string()
-                            } else {
-                                "realtime".to_string()
-                            }
+                transcription_mode: Some(match state.audio_manager.transcription_mode_hint() {
+                    Some(mode) => mode.as_str().to_string(),
+                    None => {
+                        if audio_snap.segments_deferred > 0
+                            || audio_snap.segments_batch_processed > 0
+                        {
+                            "batch".to_string()
+                        } else {
+                            "realtime".to_string()
                         }
-                    },
-                ),
+                    }
+                }),
                 transcription_paused: Some(transcription_paused),
                 segments_deferred: if audio_snap.segments_deferred > 0 {
                     Some(audio_snap.segments_deferred)
