@@ -443,6 +443,9 @@ async fn health_check_inner(state: &Arc<AppState>) -> HealthCheckResponse {
         .filter(|count| *count > 0);
     let oldest_pending_transcription_at =
         audio_reconciliation_backlog.and_then(|(_, oldest)| oldest);
+    let oldest_pending_age_secs = oldest_pending_transcription_at
+        .map(|ts| (now.timestamp() - ts.timestamp()).max(0) as u64)
+        .unwrap_or(0);
 
     // Query meeting/audio-session state once, early, so both the stall checks
     // below and the audio_pipeline payload further down can reuse it. The
@@ -568,10 +571,6 @@ async fn health_check_inner(state: &Arc<AppState>) -> HealthCheckResponse {
         // false-positive class during a live audio session.
         let backlog = audio_reconciliation_backlog.unwrap_or((0, None));
         let pending_count = backlog.0;
-        let oldest_pending_age_secs = backlog
-            .1
-            .map(|ts| (now.timestamp() - ts.timestamp()).max(0) as u64)
-            .unwrap_or(0);
         let stalled = audio_backlog_is_stalled(
             pending_count,
             oldest_pending_age_secs,
@@ -719,14 +718,21 @@ async fn health_check_inner(state: &Arc<AppState>) -> HealthCheckResponse {
 
     // Audio degradation: chunks_channel_full > 0 means the Whisper consumer
     // couldn't keep up and audio was dropped even after a 30s backpressure wait.
-    // A reconciliation backlog means audio exists but transcript has not landed
-    // yet, which should be visible instead of reported as healthy — *unless*
-    // the backlog is the expected result of batch mode deferring during a
-    // live session, in which case it's not a problem to surface.
+    // A reconciliation backlog only matters when it is actually *stalled*: a
+    // few recent segments waiting for background reconciliation is normal —
+    // especially in batch mode, where the freshness delay means there is always
+    // ~10 min of in-flight audio in the queue by design. Gate on the same
+    // threshold as audio_db_write_stalled (>20 pending AND oldest > 2x the
+    // freshness delay) instead of flagging any single pending segment, which
+    // otherwise pins a batch-mode recorder at degraded/503 whenever it is not
+    // in a live meeting.
     let audio_degraded = if !state.audio_disabled && audio_snap.uptime_secs > 120.0 {
         let channel_full = audio_snap.chunks_channel_full > 0;
-        let transcription_backlog =
-            pending_transcription_segments.is_some() && !intentionally_deferring;
+        let transcription_backlog = audio_backlog_is_stalled(
+            pending_transcription_segments.unwrap_or(0),
+            oldest_pending_age_secs,
+            intentionally_deferring,
+        );
         if channel_full {
             warn!(
                 "health_check: {} audio chunk(s) dropped (transcription engine too slow)",
@@ -1203,6 +1209,12 @@ mod tests {
 
         // Big count but young enough — not a stall yet.
         assert!(!audio_backlog_is_stalled(200, freshness, false));
+
+        // Batch-mode steady state: a handful of segments a few minutes past the
+        // freshness delay is the pipeline working as designed, NOT a stall — so
+        // it must not trip audio_degraded/503 (regression: the old
+        // `pending_transcription_segments.is_some()` check flagged this).
+        assert!(!audio_backlog_is_stalled(3, freshness + 3 * 60, false));
     }
 
     // Models the time-bounded `stream_hijacked` decision from the health check.
